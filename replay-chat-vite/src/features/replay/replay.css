@@ -1,0 +1,184 @@
+/* Replay page styles. Shared base styles live in src/shared/styles/base.css. */
+.replay-layout{display:grid;grid-template-columns:390px minmax(0,1fr);gap:24px;align-items:start}
+.prompt-row{display:flex;gap:12px;padding:19px 22px;border-bottom:1px solid var(--line);font-size:12px}
+.prompt-row:last-child{border-bottom:0}
+.prompt-row.active{background:#faf8e9}
+.prompt-row.done .turn-number{background:#eaf0fc;color:var(--blue);border-color:#d3dff9}
+.prompt-row p{margin:0;line-height:1.75}
+.prompt-row .row-label{font-size:9px;text-transform:uppercase;letter-spacing:.8px;color:#939888;margin-bottom:5px}
+.control-panel{padding:24px}
+.model-compare{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px}
+.model-compare .field-label{margin-bottom:6px}
+.model-compare .model-select{width:100%;max-width:none;padding:9px 8px}
+.replay-controls{display:flex;gap:8px;flex-wrap:wrap}
+.progress-row{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin:24px 0 7px}
+.progress-track{height:4px;border-radius:3px;background:#f0f2eb;overflow:hidden}
+.progress-track div{height:100%;background:var(--blue);transition:width .2s}
+.results-head{display:flex;justify-content:space-between;align-items:center;padding:22px 24px 15px}
+.result-tabs{display:flex;gap:6px;padding:0 24px 15px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.result-tabs button{padding:6px 10px;background:white;border:1px solid var(--line);border-radius:6px;font-size:11px}
+.result-tabs button.active{background:var(--ink);color:white;border-color:var(--ink)}
+.result-entry{padding:22px 24px;border-bottom:1px solid var(--line)}
+.result-label{display:flex;align-items:center;justify-content:space-between;font-size:10px;color:var(--muted);margin-bottom:12px}
+.result-entry .message-copy{font-size:12px}
+.notice-bar{background:#f5f8ff;border:1px solid #dee7fc;color:#43649f;border-radius:8px;padding:10px 14px;font-size:11px;margin-top:17px}
+.prompt-toolbar{display:flex;justify-content:space-between;align-items:center}
+@media(max-width:1100px){.replay-layout{grid-template-columns:310px minmax(0,1fr)}}
+@media(max-width:780px){.replay-layout{grid-template-columns:1fr}.control-panel{padding:20px}.replay-layout .panel{margin-bottom:0}}
+@media(max-width:440px){.replay-controls .btn{flex:1}}
+.workspace-tabs{display:flex;gap:26px;border-bottom:1px solid var(--line);margin:-3px 0 27px}
+.workspace-tab{display:flex;align-items:center;gap:9px;position:relative;padding:13px 2px 16px;border:0;background:transparent;font-size:13px;font-weight:600;color:#686e60;white-space:nowrap}
+.workspace-tab svg{width:17px;height:17px}
+.workspace-tab.active{color:var(--ink)}
+.workspace-tab.active:after{content:'';position:absolute;height:3px;left:0;right:0;bottom:-1px;background:var(--ink);border-radius:3px}
+.workspace-tab:hover{color:var(--ink)}
+.tab-count{font-size:9px;padding:1px 5px;min-width:18px;text-align:center;background:#eff1e9;border-radius:4px;color:#747a69}
+.replay-section-heading{display:flex;justify-content:space-between;gap:20px;align-items:center;margin-bottom:19px}
+.replay-section-heading .small{margin-bottom:0}
+.replay-section-heading h2{font-size:17px}
+.replay-layout{--prompt-width:365px;grid-template-columns:var(--prompt-width) minmax(0,1fr);position:relative;transition:grid-template-columns .28s ease,gap .28s ease}
+.prompts-slot{width:var(--prompt-width);min-width:0;transition:transform .28s ease,visibility .28s;transform:translateX(0);visibility:visible}
+.prompts-panel{width:100%}
+.replay-main{min-width:0}
+.replay-layout.prompts-hidden{grid-template-columns:0 minmax(0,1fr);gap:0}
+.prompts-hidden .prompts-slot{transform:translateX(calc(-100% - 60px));visibility:hidden;pointer-events:none}
+.replay-agent-select{max-width:none;width:100%;margin-bottom:20px}
+.records-panel{overflow:hidden}
+.record-row{display:flex;gap:16px;align-items:center;padding:22px 24px;border-bottom:1px solid var(--line)}
+.record-row:last-child{border:0}
+.record-symbol{background:var(--soft);border:1px solid var(--line);border-radius:9px;width:38px;height:38px;display:grid;place-items:center;flex:none}
+.record-symbol svg{width:19px;height:19px}
+.replay-record-symbol{background:#fbf7df;border-color:#eee8c8}
+.record-detail{min-width:0;flex:1}
+.record-detail h3{font-size:13px;margin-bottom:3px}
+.record-detail p{font-size:12px;color:#69705e;margin:0 0 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:750px}
+.record-detail .small{font-size:10px}
+.saved-records-heading{margin-top:32px}
+.diff-legend{display:flex;gap:18px;font-size:10px;color:#727969;align-items:center;flex-wrap:wrap}
+.diff-legend span{display:flex;align-items:center;gap:6px}
+.diff-legend i{display:inline-block;width:13px;height:13px;border-radius:3px}
+.diff-removed{background:#d3e1ff;color:var(--ink)}
+.diff-added{background:#fff1ad;color:var(--ink)}
+.diff-selectors{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px;padding:22px 24px}
+.diff-select{width:100%;padding:11px 12px;border:1px solid #dfe3d7;border-radius:8px;background:white;font-size:12px;color:var(--ink)}
+.diff-summary{grid-column:1 / -1;display:flex;align-items:center;gap:12px;border-top:1px solid var(--line);padding-top:16px}
+.diff-table{margin-top:22px;display:grid;gap:20px}
+.diff-prompt{padding:18px 24px;background:#fafbf7;border-bottom:1px solid var(--line)}
+.diff-prompt p{font-size:12px;margin:0;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}
+.diff-prompt .eyebrow{font-size:9px}
+.diff-columns{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.diff-response{padding:23px 24px;min-width:0}
+.diff-response+.diff-response{border-left:1px solid var(--line)}
+.diff-response .message-copy{font-size:12px;line-height:1.9}
+.diff-response mark{border-radius:2px;padding:1px 0}
+.different-prompts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px}
+.different-prompts b{display:inline-block;padding:0 6px;margin-right:4px;background:#eef0e6;border-radius:3px;font-size:9px}
+.diff-summary .small{font-size:10px}
+@media(max-width:1100px){.replay-layout{--prompt-width:310px}}
+@media(max-width:780px){.workspace-tabs{gap:22px;margin-top:0}.workspace-tab{font-size:12px;gap:7px}.replay-layout,.replay-layout.prompts-hidden{grid-template-columns:minmax(0,1fr)}.replay-layout{gap:20px;--prompt-width:100%}.prompts-slot{width:100%;position:relative}.prompts-hidden .prompts-slot{position:absolute;left:0;top:0;transform:translateX(calc(-100% - 40px))}.replay-section-heading{gap:10px}.diff-legend{gap:8px}.diff-selectors{padding:18px;gap:15px;grid-template-columns:1fr}.diff-summary{grid-column:auto;align-items:flex-start;flex-direction:column;gap:8px}.diff-columns{grid-template-columns:minmax(0,1fr)}.diff-response+.diff-response{border-left:0;border-top:1px solid var(--line)}.record-row{padding:18px;gap:12px}.record-symbol{display:none}.record-row .btn{padding:8px 10px}.diff-prompt,.diff-response{padding:18px}.different-prompts{grid-template-columns:1fr;gap:8px}}
+@media(max-width:440px){.workspace-tabs{gap:18px}.workspace-tab{gap:6px}.workspace-tab svg{width:15px;height:15px}.replay-section-heading:has(.diff-legend){flex-direction:column;align-items:flex-start}.record-detail p{max-width:210px}.tab-count{display:none}}
+/* Keep the "Your prompts" restore tab (fixed to the left edge) clear of the replay content. */
+.replay-layout{transition:grid-template-columns .28s ease,gap .28s ease,margin-left .28s ease}
+/* The "Your prompts" restore tab sits on the screen's left edge, level with the top of the first panel. It is positioned
+   inside the layout (so it scrolls with it and shares its top), pulled left by the layout's own distance from the edge:
+   the page padding (--edge), the 40px margin below, and the space either side of a page wider than 1512px. */
+.replay-layout{--edge:44px}
+@media(max-width:1100px){.replay-layout{--edge:28px}}
+@media(max-width:780px){.replay-layout{--edge:18px}}
+.replay-layout.prompts-hidden{margin-left:40px}
+.replay-layout .prompts-restore{position:absolute;top:0;left:calc(-1 * (var(--edge) + 40px + max(0px, (100vw - 1512px) / 2)));border-left:0;border-radius:0 9px 9px 0;box-shadow:2px 3px 12px #22280008}
+.source-chat{margin-bottom:14px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--soft)}
+.source-chat .field-label{margin-bottom:8px}
+.source-chat-note{margin:8px 0 0;color:var(--muted)}
+.replay-options{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:end;margin:0 0 14px}
+.kb-switch{display:flex;gap:9px;align-items:center;min-height:38px}
+.kb-switch label{font-size:12px;font-weight:600;display:flex;gap:6px;align-items:center}
+.diff-selectors{display:block;padding:0}
+.diff-selector-list{display:grid;gap:22px;padding:20px 22px}
+.diff-summary-panel{padding:14px 20px;margin-bottom:0}
+.diff-summary-panel .diff-summary{border:0;padding:0}
+.diff-settings{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px} /* sits directly under its replay's drop down */
+@media(max-width:780px){.replay-options{grid-template-columns:1fr}}
+
+/* History tab: the chat's saved replays as versions */
+.version-block+.version-block{border-top:1px solid var(--line)}
+.version-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:14px 22px 0}
+.version-head h3{margin:0;font-size:15px}
+
+/* Diff: side-by-side line comparison. Each row is two numbered cells, so lines stay level even when they wrap. */
+.diff-lines{border-top:1px solid var(--line);font-size:12px;line-height:1.7;padding:6px 0}
+.diff-row{display:grid;grid-template-columns:40px minmax(0,1fr) 40px minmax(0,1fr)}
+.diff-num{padding:2px 9px 2px 0;text-align:right;color:#a0a594;font-size:10px;user-select:none;background:#fafbf7}
+.diff-cell{padding:2px 12px;white-space:pre-wrap;overflow-wrap:anywhere;min-width:0}
+.diff-cell.a{border-right:1px solid var(--line)}
+.diff-cell.a.removed{background:#e9f0ff}
+.diff-cell.b.added{background:#fff7cc}
+.diff-cell.a.changed{background:#f3f7ff}
+.diff-cell.b.changed{background:#fffbe3}
+.diff-cell.gap{background:repeating-linear-gradient(135deg,#f6f7f2,#f6f7f2 6px,#fbfbf8 6px,#fbfbf8 12px)}
+.diff-head{border-bottom:1px solid var(--line);margin-bottom:4px}
+.diff-head .diff-cell{font-size:11px;font-weight:700;padding-top:6px;padding-bottom:8px}
+.diff-cell mark{border-radius:2px;padding:1px 0}
+@media(max-width:780px){.diff-row{grid-template-columns:26px minmax(0,1fr) 26px minmax(0,1fr)}.diff-cell{padding:2px 7px}.diff-num{padding-right:5px}}
+.diff-tree{margin:0}
+.diff-tree .diff-lines{border-top:1px solid var(--line);background:#fff;border-radius:0 0 8px 8px;overflow:hidden}
+.diff-tree .diff-cell{font-size:11px}
+.replay-temperature{width:100%;max-width:none;padding:9px 8px}
+.diff-cell.heading{font-weight:700;letter-spacing:.2px;padding-top:7px}
+.diff-row:has(.diff-cell.heading):not(:first-child){border-top:1px solid var(--line)}
+.record-actions{display:flex;gap:8px;flex:none;align-items:center}
+
+/* Diff: log prob cliffs, in red, with their value in a tooltip (see shared/hover-tip.js) */
+.logprob-cliff{background:#ffd6d1;color:#7d1710;border-radius:2px;box-shadow:inset 0 -2px 0 #d93025;cursor:help;outline-offset:1px}
+.logprob-cliff:focus-visible{outline:2px solid #d93025}
+.logprob-cliff-swatch{display:inline-block;width:13px;height:13px;border-radius:3px;background:#ffd6d1;box-shadow:inset 0 -2px 0 #d93025}
+.hover-tip{position:fixed;z-index:80;max-width:280px;padding:8px 11px;border-radius:7px;background:#7d1710;color:#fff;font-size:11px;line-height:1.6;white-space:pre-line;pointer-events:none;box-shadow:0 4px 14px #7d171040}
+.hover-tip[hidden]{display:none}
+
+/* Diff: Chat / API logs views */
+.diff-views{margin:22px 0 0}
+.api-diff{display:grid;gap:16px;margin-top:20px}
+.api-diff-note{margin:0;color:var(--muted)}
+.api-diff-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start}
+.api-diff-head{font-size:11px;font-weight:700}
+.api-diff-headbar{padding:11px 16px;position:sticky;top:0;z-index:5}
+@media(max-width:780px){.api-diff-row{grid-template-columns:minmax(0,1fr)}}
+.api-pair{border-top:1px solid var(--line)}
+.api-pair:first-child{border-top:0}
+.api-pair-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 16px 8px}
+.api-pair-head h4{margin:0;font-size:13px}
+.api-pair-brief{display:flex;gap:16px;font-size:11px;color:var(--muted)}
+.api-diff-calls{padding:0}
+.api-pair .diff-lines{border-top:1px solid var(--line);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;padding:4px 0}
+.api-pair .diff-cell{white-space:pre-wrap;overflow-wrap:anywhere}
+.logprob-diverge{background:#e6dcff;color:#3b1f7a;border-radius:2px;box-shadow:inset 0 -2px 0 #6f42c1;cursor:help;outline-offset:1px}
+.logprob-diverge:focus-visible{outline:2px solid #6f42c1}
+.logprob-diverge-swatch{display:inline-block;width:13px;height:13px;border-radius:3px;background:#e6dcff;box-shadow:inset 0 -2px 0 #6f42c1}
+.diverge-note{margin:8px 0 0;color:#3b1f7a;line-height:1.6}
+.cliff-control{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;font-weight:600}
+.cliff-control input{width:76px;max-width:none;padding:6px 8px}
+.cliff-control .small{font-weight:400;color:var(--muted)}
+.results-title{display:flex;align-items:center;gap:10px}
+.replay-status-row{justify-content:flex-end;margin-bottom:14px;min-height:0}
+.modal-lead{margin:0;font-size:20px;font-weight:700;letter-spacing:-.4px;line-height:1.3}
+/* Play all popup: a big spinner and the replay version number while it runs, then a View Diff button */
+.play-modal{max-width:380px}
+.play-body{display:grid;justify-items:center;gap:14px;padding:38px 28px 32px;text-align:center}
+.play-body h2{margin:0;font-size:20px}
+.play-body p{margin:0}
+.play-spinner{width:84px;height:84px;border-radius:50%;border:8px solid var(--line);border-top-color:var(--blue);animation:play-spin .9s linear infinite}
+.play-check{width:84px;height:84px;border-radius:50%;display:grid;place-items:center;background:#eaf0fc;color:var(--blue)}
+.play-check svg{width:40px;height:40px;fill:none;stroke:currentColor;stroke-width:2.5}
+@keyframes play-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.play-spinner{animation-duration:3s}}
+/* the models and settings in use, listed in the Play all popup */
+.play-models{list-style:none;margin:0;padding:0;display:grid;gap:4px;font-size:12px;width:100%;text-align:left}
+.play-models li{display:flex;gap:8px;align-items:baseline}
+.play-models b{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:5px;background:var(--ink);color:#fff;font-size:10px;flex:none}
+.play-settings{width:100%}
+.play-settings .config-chips{justify-content:center}
+.play-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+/* the gear at the right edge of the Chat / API logs tabs */
+.diff-views .diff-settings-btn{margin-left:auto;align-self:center;margin-bottom:6px}
+.diff-views .diff-settings-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2}
+.diff-settings .badge.diff-changed{background:#e6dcff;border-color:#6f42c1;color:#3b1f7a;font-weight:700}

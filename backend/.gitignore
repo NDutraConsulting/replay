@@ -1,0 +1,9 @@
+app.db*
+knowledgebase.db*
+Log.db*
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.env
+.focusari/*

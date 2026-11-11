@@ -1,0 +1,32 @@
+[
+  {
+    "role": "user",
+    "content": "Help me plan a simple website for my new project.",
+    "demo": false
+  },
+  {
+    "role": "assistant",
+    "content": "Absolutely. A good website starts with a clear purpose. Before we get into design, let’s define three things:\n\n1. Who is the website for?\n2. What should visitors be able to do?\n3. What makes your project different?\n\nTell me a little about your project, and we can build from there.",
+    "demo": true
+  },
+  {
+    "role": "user",
+    "content": "It’s a creative workspace for small teams. I want it to feel simple and approachable.",
+    "demo": false
+  },
+  {
+    "role": "assistant",
+    "content": "Then let’s keep it focused. I’d start with three core pages:\n\n1. Home — a clear introduction and one primary action.\n2. Workspace — a shared place to create, organize, and collaborate.\n3. Account — straightforward settings that stay out of the way.\n\nFor the visual direction, think generous white space, readable typography, and a small, intentional color palette. The interface should feel calm, so the work can take center stage.",
+    "demo": true
+  },
+  {
+    "role": "user",
+    "content": "Can you turn that into a short project brief?",
+    "demo": false
+  },
+  {
+    "role": "assistant",
+    "content": "Project brief: A calmer place to create\n\nBuild a simple, approachable workspace that helps small creative teams bring ideas together. Make it easy to start a project, share work, and keep everyone on the same page.\n\nKeep the experience focused on three pages: Home, Workspace, and Account. Use a clean white canvas, clear navigation, and one obvious next step at every stage.\n\nThe goal: less time figuring out the tool, more time making something great.",
+    "demo": true
+  }
+]

@@ -1,0 +1,302 @@
+{
+  "assistant": [],
+  "code": [
+    {
+      "name": "Python",
+      "subcategories": [
+        {
+          "name": "Style & Idioms",
+          "documents": [
+            {
+              "title": "python-style-and-idioms.txt",
+              "status": "current",
+              "content": "Follow PEP 8; format with a tool such as black or ruff format.\nPrefer comprehensions, context managers (with) and pathlib over manual loops, try/finally and string paths.\nAdd type hints to public functions and check them with mypy or pyright.\nAvoid mutable default arguments and bare except clauses."
+            }
+          ]
+        },
+        {
+          "name": "Testing",
+          "documents": [
+            {
+              "title": "pytest-practices.txt",
+              "status": "current",
+              "content": "Use pytest with small, independent tests named for the behavior they check.\nUse fixtures for setup, parametrize for variations and tmp_path for files.\nMock at boundaries (network, clock, filesystem), not internal functions."
+            }
+          ]
+        },
+        {
+          "name": "Packaging & Environments",
+          "documents": [
+            {
+              "title": "virtualenv-and-dependencies.txt",
+              "status": "current",
+              "content": "Use a virtual environment per project and declare dependencies in pyproject.toml.\nPin or lock dependencies for applications; use ranges for libraries.\nAudit dependencies regularly (pip-audit) and keep them updated."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "C++",
+      "subcategories": [
+        {
+          "name": "Modern C++",
+          "documents": [
+            {
+              "title": "raii-and-ownership.txt",
+              "status": "current",
+              "content": "Own resources with RAII; prefer std::unique_ptr, and std::shared_ptr only for genuinely shared ownership.\nAvoid raw new/delete; use std::vector, std::string and std::span instead of manual arrays.\nMark functions const, noexcept and [[nodiscard]] where appropriate; prefer value semantics.\nFollow the C++ Core Guidelines."
+            }
+          ]
+        },
+        {
+          "name": "Safety & Tooling",
+          "documents": [
+            {
+              "title": "sanitizers-and-static-analysis.txt",
+              "status": "current",
+              "content": "Build tests with AddressSanitizer and UndefinedBehaviorSanitizer; use ThreadSanitizer for concurrent code.\nEnable strong warnings (-Wall -Wextra -Wconversion) and treat them as errors in CI.\nRun clang-tidy and cppcheck; format with clang-format."
+            },
+            {
+              "title": "cpp-build-and-testing.txt",
+              "status": "pending-review",
+              "content": "Use CMake with out-of-source builds and target-based dependencies.\nUnit test with GoogleTest or Catch2 and run tests in CI on every change."
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "research": [
+    {
+      "name": "Networks",
+      "subcategories": [
+        {
+          "name": "Segmentation & Firewalls",
+          "documents": [
+            {
+              "title": "network-segmentation.txt",
+              "status": "current",
+              "content": "Segment networks by trust level and function (user, server, management, guest, IoT).\nDefault-deny between segments; allow only documented flows.\nKeep management interfaces on a dedicated, access-controlled network.\nReview firewall rules on a schedule and remove rules with no owner or expiry."
+            },
+            {
+              "title": "firewall-rule-hygiene.txt",
+              "status": "current",
+              "content": "Every rule needs an owner, a ticket or reason, and a review date.\nPrefer specific sources, destinations and ports over \"any\".\nLog denied traffic at segment boundaries and alert on unusual spikes."
+            }
+          ]
+        },
+        {
+          "name": "Secure Protocols",
+          "documents": [
+            {
+              "title": "tls-everywhere.txt",
+              "status": "current",
+              "content": "Require TLS 1.2 or newer for all internal and external services; prefer TLS 1.3.\nAutomate certificate issuance and renewal; monitor expiry.\nDisable plaintext protocols (telnet, FTP, HTTP) unless explicitly justified."
+            },
+            {
+              "title": "legacy-tls-notes.txt",
+              "status": "archived",
+              "content": "SSL 3.0, TLS 1.0 and TLS 1.1 are deprecated. Kept for historical reference only."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Penetration Testing",
+      "subcategories": [
+        {
+          "name": "Planning & Scope",
+          "documents": [
+            {
+              "title": "rules-of-engagement.txt",
+              "status": "current",
+              "content": "Obtain written authorization before any testing.\nDefine in-scope systems, testing windows, permitted techniques and emergency contacts.\nAgree how sensitive data found during testing is handled and destroyed."
+            }
+          ]
+        },
+        {
+          "name": "Reporting",
+          "documents": [
+            {
+              "title": "pentest-reporting.txt",
+              "status": "current",
+              "content": "Lead with an executive summary and business impact.\nFor each finding: severity, affected assets, evidence, reproduction steps and remediation.\nTrack retesting of fixes and record accepted risks with an owner."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "HIPAA",
+      "subcategories": [
+        {
+          "name": "Privacy & Security Rules",
+          "documents": [
+            {
+              "title": "hipaa-safeguards.txt",
+              "status": "current",
+              "content": "Administrative: risk analysis, workforce training, access management, incident procedures.\nPhysical: facility access controls, workstation and device/media controls.\nTechnical: unique user IDs, audit controls, integrity controls, transmission security.\nApply the minimum necessary standard to uses and disclosures of PHI."
+            }
+          ]
+        },
+        {
+          "name": "Breach Notification",
+          "documents": [
+            {
+              "title": "hipaa-breach-notification.txt",
+              "status": "pending-review",
+              "content": "Assess every incident involving PHI with a documented four-factor risk assessment.\nNotify affected individuals without unreasonable delay and within 60 days of discovery.\nLarger breaches also require notice to HHS and, at 500+ individuals, to the media.\nVerify timelines with counsel before relying on this summary."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SOC2",
+      "subcategories": [
+        {
+          "name": "Trust Services Criteria",
+          "documents": [
+            {
+              "title": "soc2-trust-criteria.txt",
+              "status": "current",
+              "content": "Security (common criteria) is required; Availability, Confidentiality, Processing Integrity and Privacy are optional.\nMap each control to a criterion and keep an owner for every control."
+            }
+          ]
+        },
+        {
+          "name": "Audit Readiness",
+          "documents": [
+            {
+              "title": "soc2-evidence-collection.txt",
+              "status": "pending-review",
+              "content": "Collect evidence continuously (access reviews, change tickets, training records), not just before the audit.\nType 2 reports test operating effectiveness over a period, so gaps in the period matter."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Social Engineering",
+      "subcategories": [
+        {
+          "name": "Awareness & Defense",
+          "documents": [
+            {
+              "title": "phishing-defense.txt",
+              "status": "current",
+              "content": "Run regular, role-based awareness training and simulated phishing with supportive follow-up.\nMake reporting easy (one-click report button) and thank reporters.\nRequire out-of-band verification for payment, credential and access requests.\nEnforce phishing-resistant MFA (FIDO2/passkeys) for high-risk accounts."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Security Tools",
+      "subcategories": [
+        {
+          "name": "Scanners & Analyzers",
+          "documents": [
+            {
+              "title": "authorized-scanning-tools.txt",
+              "status": "current",
+              "content": "Use vulnerability scanners and network mappers (for example Nmap, OpenVAS, Nessus) only on systems you are authorized to test.\nPacket analyzers such as Wireshark help diagnose protocol issues; handle captures as sensitive data.\nTune scan intensity to avoid disrupting production services."
+            }
+          ]
+        },
+        {
+          "name": "Secrets & Dependencies",
+          "documents": [
+            {
+              "title": "secrets-and-dependency-scanning.txt",
+              "status": "current",
+              "content": "Scan repositories and CI for committed secrets and rotate anything exposed.\nTrack dependencies with an SBOM and monitor for known vulnerabilities.\nPin versions and verify signatures or checksums where available."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Certifications",
+      "subcategories": [
+        {
+          "name": "Foundational & Professional",
+          "documents": [
+            {
+              "title": "security-certifications.txt",
+              "status": "current",
+              "content": "Foundational: CompTIA Security+, (ISC)2 SSCP.\nManagement: CISSP, CISM, CISA.\nOffensive: OSCP, GPEN, PNPT.\nCloud: CCSP, AWS/Azure/GCP security specialty certifications."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Agentic Security",
+      "subcategories": [
+        {
+          "name": "Prompt Injection",
+          "documents": [
+            {
+              "title": "prompt-injection-defense.txt",
+              "status": "pending-review",
+              "content": "Treat all retrieved or tool-returned content as untrusted data, never as instructions.\nSeparate system instructions from user and external content; label sources.\nRequire confirmation for actions with side effects triggered by external content.\nLog prompts, tool calls and outputs for review."
+            }
+          ]
+        },
+        {
+          "name": "Tool & Permission Boundaries",
+          "documents": [
+            {
+              "title": "least-privilege-agents.txt",
+              "status": "current",
+              "content": "Give each agent only the tools and credentials its task needs.\nUse short-lived, scoped tokens and separate identities per agent.\nSandbox code execution and restrict network egress.\nKeep a human in the loop for destructive or irreversible operations."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Security Monitoring",
+      "subcategories": [
+        {
+          "name": "Logging & Detection",
+          "documents": [
+            {
+              "title": "centralized-logging.txt",
+              "status": "current",
+              "content": "Ship authentication, network, endpoint and application logs to a central, tamper-resistant store.\nSynchronize clocks and keep consistent fields so events can be correlated.\nWrite detections for known-bad behavior and review false positives regularly."
+            }
+          ]
+        },
+        {
+          "name": "Incident Response",
+          "documents": [
+            {
+              "title": "incident-response-basics.txt",
+              "status": "current",
+              "content": "Phases: preparation, detection and analysis, containment, eradication, recovery, lessons learned.\nKeep an on-call roster, runbooks and pre-approved containment actions.\nPreserve evidence and document a timeline as you work."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Books",
+      "subcategories": [
+        {
+          "name": "Reference Reading",
+          "documents": [
+            {
+              "title": "security-reading-list.txt",
+              "status": "current",
+              "content": "Security Engineering - Ross Anderson\nThreat Modeling: Designing for Security - Adam Shostack\nThe Web Application Hacker's Handbook - Dafydd Stuttard and Marcus Pinto\nPractical Malware Analysis - Michael Sikorski and Andrew Honig\nThe Tangled Web - Michal Zalewski"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

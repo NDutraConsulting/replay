@@ -1,0 +1,27 @@
+/* Account page styles. Shared base styles live in src/shared/styles/base.css. */
+.account-grid{max-width:1050px;display:grid;grid-template-columns:minmax(0,690px) 270px;gap:28px}
+.form-content{padding:25px}
+.field{margin-bottom:23px}
+.field input[type=text],.field input[type=password],.field input[type=url],.field textarea{width:100%;border:1px solid #dfe3d7;border-radius:8px;padding:11px 13px;font-size:13px;color:var(--ink);background:#fff}
+.field textarea{min-height:94px;resize:vertical;line-height:1.8}
+.field small{display:block;font-size:11px;color:var(--muted);margin-top:7px}
+.password-wrap{position:relative}
+.password-wrap input{padding-right:50px!important}
+.password-wrap button{position:absolute;right:6px;top:5px}
+.form-actions{border-top:1px solid var(--line);padding-top:22px;display:flex;gap:9px;align-items:center}
+.account-aside{padding-top:6px}
+.account-aside .circle-icon{background:#f4f5ef;margin-bottom:14px}
+.account-aside p{font-size:12px;color:var(--muted);line-height:1.8;margin-bottom:20px}
+.account-aside ul{padding-left:17px;font-size:12px;color:#6b7163;line-height:2.3}
+.account-notice{margin-top:22px;background:#faf9ed;border-radius:9px;padding:14px;font-size:11px;color:#77775f}
+.connection-status{font-size:11px;margin-top:15px;color:var(--muted)}
+@media(max-width:1100px){.account-grid{grid-template-columns:minmax(0,1fr) 240px}}
+@media(max-width:780px){.account-grid{grid-template-columns:1fr}.account-aside{padding:10px}}
+@media(max-width:440px){.form-actions{flex-wrap:wrap}}
+.account-cost-note{margin-top:20px}
+.account-main{display:grid;gap:24px;align-content:start}
+.api-label-select{width:100%;max-width:none;padding:10px 12px;font-size:13px}
+.api-read-only{margin:-6px 0 18px;color:var(--muted)}
+.empty#no-apis{padding:18px 0}
+.btn.danger{background:#fff;border-color:#e3b5b0;color:#9c1c14}
+.btn.danger:hover{background:#fbe1de}

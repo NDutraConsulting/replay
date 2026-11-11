@@ -1,0 +1,77 @@
+/* Chat page styles. Shared base styles live in src/shared/styles/base.css. */
+.layout{display:grid;grid-template-columns:252px minmax(0,1fr);gap:24px}
+.side-card{position:relative;z-index:1;border:1px solid var(--line);border-radius:var(--radius);align-self:start;background:white} /* no overflow:hidden: the hide button's tooltip must be able to sit outside the card */
+.side-top{padding:21px 20px 17px;border-bottom:1px solid var(--line)}
+.side-top .row{display:flex;justify-content:space-between;align-items:center}
+.side-title{font-size:12px;font-weight:650}
+.turn-list{padding:8px}
+.turn-item{padding:13px 12px;border-radius:7px;display:flex;gap:10px;align-items:flex-start;border:0;background:transparent;text-align:left;width:100%;font-size:12px;line-height:1.55}
+.turn-item.current{background:#f3f4ef}
+.turn-text{overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.side-footer{margin:8px 20px 18px;padding-top:14px;border-top:1px solid var(--line);display:flex;align-items:center;gap:7px}
+.side-footer svg{width:14px;height:14px;color:#8b9380}
+.replay-callout{padding:20px;margin-top:18px;background:#faf9ed;border:1px solid #efedda;border-radius:12px}
+.replay-callout .circle-icon{background:#f4edb8;margin-bottom:12px}
+.replay-callout p{font-size:12px;color:#7b7b68;line-height:1.7;margin:7px 0 13px}
+.text-link{font-size:12px;font-weight:650;display:inline-flex;align-items:center;gap:8px}
+.text-link svg{width:14px;height:14px}
+.chat-card{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;min-height:650px;height:calc(100vh - 265px);max-height:1000px}
+.chat-toolbar{padding:15px 24px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;min-height:77px}
+.agent-icon{background:#f1f3ed;border:1px solid #e3e7db;border-radius:9px;width:36px;height:36px;display:grid;place-items:center}
+.agent-icon svg{width:19px;height:19px}
+.select-wrap{display:flex;flex-direction:column;line-height:1.25}
+.select-wrap label{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.select-wrap select{border:0;background:transparent;color:var(--ink);font-size:12px;font-weight:650;max-width:190px;padding:0 20px 0 0;cursor:pointer}
+.toolbar-right{margin-left:auto;display:flex;gap:12px;align-items:center}
+.date-separator{display:flex;align-items:center;gap:14px;justify-content:center;font-size:10px;color:#a0a493;margin-bottom:24px}
+.date-separator:before,.date-separator:after{content:'';width:40px;height:1px;background:var(--line)}
+.message-body{min-width:0;max-width:min(78%,640px);padding:11px 14px;border:1px solid var(--line);border-radius:16px;background:var(--soft)}
+.message.assistant .message-body{border-bottom-left-radius:5px}
+.message.user{flex-direction:row-reverse}
+.message.user .message-body{border-bottom-right-radius:5px;background:#faf6dc;border-color:#efe7bb}
+.message.user .message-meta{justify-content:flex-end}
+.message.summary .message-body{flex:1;max-width:none;border-radius:12px;border-style:dashed}
+@media(max-width:780px){.message-body{max-width:92%}}
+.message-meta{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:650;margin:2px 0 9px}
+.message-meta span{font-size:9px;font-weight:400;color:#999d91}
+.message-tools{display:flex;gap:12px;margin-top:11px;color:#a0a594;font-size:9px;align-items:center}
+.composer-area{padding:14px 25px 18px;background:white}
+.composer{border:1px solid #dfe3d7;border-radius:12px;padding:13px 14px 11px;box-shadow:0 3px 10px #22290004}
+.composer textarea{resize:none;width:100%;min-height:50px;max-height:140px;border:0;background:transparent;padding:1px 3px;font-size:13px;line-height:1.7;color:var(--ink)}
+.composer textarea:focus{outline:0}
+.composer textarea::placeholder{color:#969c8c}
+.composer-bottom{display:flex;align-items:center;gap:10px}
+.composer-hint{font-size:10px;color:#989e8d;margin-left:3px}
+.composer-bottom .send{margin-left:auto}
+.composer .btn{padding:7px 12px;min-height:34px}
+.below-composer{display:flex;justify-content:space-between;gap:10px;font-size:9px;color:#989d91;padding:9px 3px 0}
+@media(min-width:1650px){.chat-card{height:calc(100vh - 290px)}}
+@media(max-width:1100px){.layout{grid-template-columns:215px minmax(0,1fr)}.chat-toolbar{padding:15px 18px}.composer-hint{display:none}}
+@media(max-width:780px){.layout{grid-template-columns:1fr}.sidebar{display:none}.chat-card{min-height:580px;height:calc(100dvh - 255px)}.chat-toolbar{gap:10px;padding:13px 16px}.toolbar-right{gap:5px}.chat-toolbar .badge{display:none}.select-wrap select{max-width:130px}.composer-area{padding:10px 14px 13px}.below-composer span:last-child{display:none}}
+@media(max-width:440px){.chat-card{min-height:560px}.agent-icon{display:none}.select-wrap select{max-width:135px}}
+.chat-layout{--conversation-width:252px;grid-template-columns:var(--conversation-width) minmax(0,1fr);position:relative;transition:grid-template-columns .28s ease,gap .28s ease}
+.chat-layout .conversation-sidebar{position:relative;z-index:20;display:block;width:var(--conversation-width);min-width:0;transform:translateX(0);visibility:visible;transition:transform .28s ease,visibility .28s}
+.chat-layout.conversation-hidden{grid-template-columns:0 minmax(0,1fr);gap:0}
+.conversation-hidden .conversation-sidebar{transform:translateX(calc(-100% - 60px));visibility:hidden;pointer-events:none}
+.chat-layout .chat-card{min-width:0}
+.conversation-sidebar .side-top .row{gap:6px}
+.conversation-sidebar .prompt-head-actions{gap:7px}
+.conversation-sidebar .badge{white-space:nowrap;font-size:9px;padding:3px 5px}
+.conversation-sidebar .collapse-prompts{width:25px;height:25px}
+.conversation-sidebar .side-title{font-size:11px}
+@media(max-width:1100px) and (min-width:781px){.chat-layout{--conversation-width:230px}.conversation-sidebar .side-top{padding-left:14px;padding-right:14px}.conversation-sidebar .side-title{font-size:10px}}
+@media(max-width:780px){.chat-layout,.chat-layout.conversation-hidden{--conversation-width:100%;grid-template-columns:minmax(0,1fr)}.chat-layout{gap:20px}.chat-layout .conversation-sidebar{width:100%;position:relative}.conversation-hidden .conversation-sidebar{position:absolute;left:0;top:0;transform:translateX(calc(-100% - 40px))}.conversation-sidebar .replay-callout{display:none}.conversation-hidden .chat-card{margin-left:18px}.conversation-sidebar .side-title{font-size:12px}}
+/* Keep the "This conversation" restore tab (fixed to the left edge) clear of the chat card. */
+@media(max-width:1100px) and (min-width:781px){.chat-layout{margin-left:0;transition:grid-template-columns .28s ease,gap .28s ease,margin-left .28s ease}.chat-layout.conversation-hidden{margin-left:24px}}
+.chat-title{display:flex;flex-direction:column;gap:6px;min-width:0}
+.conversation-name{display:flex;align-items:center;gap:2px;min-width:0}
+.conversation-name h2{margin:0;font-size:15px;letter-spacing:-.3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:46ch}
+.conversation-name .icon-btn{width:28px;height:28px}
+.conversation-name .icon-btn svg{width:15px;height:15px}
+/* The card clips anything outside it (rounded corners), and the rename button is at its top edge: show its tip below. */
+.conversation-name .tooltip:after{bottom:auto;top:calc(100% + 9px);transform:translateY(-3px)}
+.conversation-name .tooltip:hover:after,.conversation-name .tooltip:focus-visible:after{transform:translateY(0)}
+.chat-toolbar{min-height:77px}
+@media(max-width:780px){.conversation-name h2{max-width:24ch}.chat-title{flex:1}}
+.composer-hint.full{color:#9c1c14;font-weight:600}
+.composer textarea:disabled{cursor:not-allowed;opacity:.6}

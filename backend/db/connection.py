@@ -1,0 +1,53 @@
+import asyncio
+import sqlite3
+from collections.abc import Callable
+
+from db.kb_move import move_knowledge_base
+from db.kb_versions import backfill as backfill_document_versions
+from db.migrate import KB_MIGRATIONS_DIR, LOG_MIGRATIONS_DIR, apply_migrations
+
+
+def get_connection(db_path: str) -> sqlite3.Connection:
+    conn = sqlite3.connect(db_path, timeout=30)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def init_db(db_path: str, knowledge_db_path: str, log_db_path: str | None = None) -> list[int]:
+    """Create/upgrade the database files (app.db, knowledgebase.db and, when given, Log.db). They persist between runs; only new migrations are applied.
+
+    Order matters: the knowledge base database is created first, the old knowledge base tables are copied out of
+    app.db (verified), and only then does app.db's migration 0004 drop them.
+    Returns the app.db migration versions applied by this call."""
+    for path in (db_path, knowledge_db_path, *([log_db_path] if log_db_path else [])):
+        conn = sqlite3.connect(path)
+        try:
+            conn.execute("PRAGMA journal_mode = WAL")
+        finally:
+            conn.close()
+    apply_migrations(knowledge_db_path, KB_MIGRATIONS_DIR)
+    if log_db_path:
+        apply_migrations(log_db_path, LOG_MIGRATIONS_DIR)
+    move_knowledge_base(db_path, knowledge_db_path)
+    backfill_document_versions(knowledge_db_path)  # every file has at least its version 1
+    return apply_migrations(db_path)
+
+
+async def run_in_db[T](db_path: str, fn: Callable[[sqlite3.Connection], T]) -> T:
+    """Run `fn(conn)` in a worker thread inside one transaction (commit on success, rollback on error).
+    Repositories write small synchronous closures and call this, so the event loop is never blocked."""
+
+    def _call() -> T:
+        conn = get_connection(db_path)
+        try:
+            result = fn(conn)
+            conn.commit()
+            return result
+        except BaseException:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    return await asyncio.to_thread(_call)

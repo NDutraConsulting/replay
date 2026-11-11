@@ -1,0 +1,14 @@
+/* Login page styles. Shared base styles live in src/shared/styles/base.css. */
+.login-wrap{min-height:100vh;display:grid;place-items:center;padding:24px}
+.login-card{width:100%;max-width:400px;padding:32px 32px 26px}
+.login-brand{display:flex;align-items:center;gap:12px;font-family:Manrope,Arial,sans-serif;font-size:21px;font-weight:800;letter-spacing:-.8px;margin-bottom:22px}
+.login-card h1{margin:0 0 6px;font-size:26px}
+.login-card .subtitle{margin:0 0 22px}
+.login-field{margin-bottom:16px}
+.login-field label{display:block;font-size:12px;font-weight:600;margin-bottom:6px}
+.login-field input{width:100%;border:1px solid #dfe3d7;border-radius:8px;padding:11px 13px;font-size:14px;color:var(--ink);background:#fff}
+.login-error{min-height:1.3em;margin:0 0 12px;color:#9c1c14;font-size:12.5px}
+.login-submit{width:100%}
+.login-switch{margin:18px 0 0;text-align:center;color:var(--muted)}
+.login-link{border:0;background:none;padding:0;font:inherit;font-weight:600;color:var(--blue);text-decoration:underline}
+@media(max-width:480px){.login-card{padding:24px 20px}}

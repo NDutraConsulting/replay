@@ -1,0 +1,44 @@
+[project]
+name = "replay-chat-backend"
+version = "0.1.0"
+description = "FastAPI backend for replay-chat-vite"
+requires-python = ">=3.14"
+dependencies = [
+    "cryptography>=44.0.0",
+    "fastapi[standard]>=0.139.0",
+    "httpx>=0.28.1",
+    "pydantic-settings>=2.14.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.9.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "unit: fast, no DB/HTTP",
+    "integration: through the FastAPI test client, real test DB, stubbed LLM",
+    "e2e: hits a real LLM provider, excluded by default",
+]
+addopts = "-m 'not e2e'"
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]  # line length is the formatter's job (long user-facing strings are fine)
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Cookie", "fastapi.File", "fastapi.Form"]
