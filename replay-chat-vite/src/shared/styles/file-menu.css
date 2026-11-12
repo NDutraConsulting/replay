@@ -1,11 +1,10 @@
-/* The File menu row shared by the Chat and Replay pages. */
-#main.container{padding-top:20px}
-.file-menu-row{display:flex;justify-content:flex-start}
+/* The File menu in the top navbar (the slot that replaces the brand text on the Chat, Replay and AI agents pages). */
+.topbar-file{display:flex;align-items:center}
 .file-menu{position:relative}
 .file-menu-btn{font-size:15px;font-weight:600;border:0;background:transparent;box-shadow:none;padding:5px 0;min-height:20px;color:var(--ink);display:inline-flex;align-items:center;gap:4px}
 .file-caret{font-size:13px}
-.file-menu-list{position:absolute;left:0;top:calc(100% + 6px);z-index:30;min-width:170px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.14);padding:6px;display:grid}
+.file-menu-list{position:absolute;left:0;top:calc(100% + 6px);z-index:30;min-width:190px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.14);padding:6px;display:grid}
 .file-menu-list[hidden]{display:none}
 .file-menu-item{border:0;background:transparent;text-align:left;padding:9px 12px;border-radius:7px;font-size:13px}
-.file-menu-item:hover,.file-menu-item:focus-visible{background:var(--soft)}
-.file-rule{border:0;border-top:1px solid var(--line);width:100vw;margin:0 0 14px calc(50% - 50vw)}
+.file-menu-item:hover:not(:disabled),.file-menu-item:focus-visible{background:var(--soft)}
+.file-menu-item:disabled{color:var(--muted);opacity:.55;cursor:not-allowed}

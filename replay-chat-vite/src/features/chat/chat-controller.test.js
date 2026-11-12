@@ -155,7 +155,7 @@ const text = (el) => el?.textContent ?? '';
 const toastText = () => document.querySelector('.toast')?.textContent;
 const messageEls = () => [...document.querySelectorAll('.message')];
 const chips = () =>
-  Object.fromEntries([...document.querySelectorAll('.config-chips .chip')].map((c) => [c.querySelector('b').textContent.toUpperCase(), c.childNodes[1].textContent]));
+  Object.fromEntries([...document.querySelectorAll('.side-settings-list li')].map((c) => [c.querySelector('b').textContent.toUpperCase(), c.childNodes[1].textContent]));
 const modal = () => document.querySelector('.modal');
 const field = (name) => modal().elements?.[name] ?? modal().querySelector(`[name="${name}"]`);
 const messageCopies = () => [...document.querySelectorAll('.message-copy')].map((e) => e.textContent);
@@ -165,12 +165,38 @@ describe('chat page', () => {
     document.body.innerHTML = '';
   });
 
+  it('has a New Chat button beside the connection badge that opens the same New conversation popup as File > New', async () => {
+    await boot();
+    const right = document.querySelector('.toolbar-right');
+    expect(right.firstElementChild.classList.contains('badge')).toBe(true);
+    expect(right.lastElementChild.id).toBe('new-chat');
+    expect(right.lastElementChild.textContent).toBe('New Chat');
+    $('new-chat').click();
+    expect(modal().querySelector('h2').textContent).toBe(document.querySelector('.modal-head h2').textContent);
+    expect(field('name')).not.toBeNull(); // the New conversation form
+    expect(field('agent') || modal().querySelector('select')).not.toBeNull();
+  });
+
   it('renders the conversation, agents and models from the server', async () => {
     await boot();
     expect(document.querySelectorAll('.message')).toHaveLength(6);
     expect(document.querySelector('.badge').textContent).toBe('3 turns');
     expect($('conversation-name').textContent).toBe('Sample conversation');
     expect(chips()).toEqual({ AGENT: 'General assistant', MODEL: 'model-a', REASONING: 'Default (model decides)', TEMPERATURE: '0', 'KB SUMMARY TOOL': 'Off' });
+    expect(document.querySelectorAll('.config-chips')).toHaveLength(0); // no chips any more: a bullet list
+    expect(document.querySelectorAll('.side-settings-list')).toHaveLength(1);
+    expect(document.querySelector('#conversation-sidebar .side-settings-list')).not.toBeNull(); // the settings sit in the sidebar
+    const box = document.querySelector('details#side-settings');
+    expect(box.open).toBe(false); // collapsed until the user opens it
+    expect(box.querySelector('summary').textContent).toBe('Settings');
+    expect([...box.querySelectorAll('ul > li')]).toHaveLength(5); // a bullet list
+    expect(document.querySelector('.turn-list').closest('details')).toBeNull(); // the prompts are not inside it
+    box.open = true;
+    box.dispatchEvent(new Event('toggle'));
+    $('prompt').value = 'one more';
+    $('chat-form').requestSubmit();
+    await settle();
+    expect(document.querySelector('details#side-settings').open).toBe(true); // stays as left after the page redraws
     expect($('agent')).toBeNull(); // the settings are fixed: no pickers on the chat page
     expect($('chat-model')).toBeNull();
     expect(document.querySelector('.drawer-username').textContent).toBe('demo');

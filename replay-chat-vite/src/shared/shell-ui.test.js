@@ -18,6 +18,22 @@ describe('shell', () => {
     expect(document.body.innerHTML).not.toMatch(/stay in this browser/);
   });
 
+  it('drops the brand text for the pages with a File menu, and gives them its slot beside the logo', () => {
+    for (const page of ['chat', 'replay', 'agents']) {
+      document.body.innerHTML = shellHTML(page, null);
+      expect(document.querySelector('.brand').textContent).toBe('');
+      expect(document.querySelector('.brand').getAttribute('aria-label')).toBe('Replay Chat');
+      expect(document.querySelector('.brand img')).not.toBeNull(); // the logo stays
+      expect(document.querySelector('.brand + #topbar-file')).not.toBeNull();
+    }
+  });
+
+  it('keeps the brand text, and has no File menu slot, on Account', () => {
+    document.body.innerHTML = shellHTML('account', null);
+    expect(document.querySelector('.brand').textContent).toBe('Replay Chat');
+    expect(document.getElementById('topbar-file')).toBeNull();
+  });
+
   it('escapes the username', () => {
     const html = shellHTML('chat', { username: '<img src=x onerror=alert(1)>' });
     expect(html).not.toContain('<img src=x');

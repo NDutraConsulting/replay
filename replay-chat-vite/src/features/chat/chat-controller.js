@@ -3,6 +3,7 @@ import './chat.css';
 import { copyText } from '../../shared/clipboard.js';
 import { newRequestId } from '../../shared/http.js';
 import { startPage } from '../../shared/shell-ui.js';
+import { mountChatFileMenu } from './chat-file-menu.js';
 import { toast, toastError } from '../../shared/toast.js';
 import {
   chatState, compactConversation, conversationFields, createConversation, loadConversation, renameConversation,
@@ -55,6 +56,9 @@ export const initChat = () =>
     const remember = (changes) => savePreferences(changes).catch(toastError);
 
     const handlers = {
+      onToggleSettings(open) {
+        state.settingsOpen = open; // no redraw: the box has already opened or closed; it stays as left when the page redraws
+      },
       onToggleConversation(hidden) {
         state.conversationHidden = hidden;
         applyConversationHidden(hidden);
@@ -205,6 +209,7 @@ export const initChat = () =>
       },
     };
 
+    mountChatFileMenu({ onNew: handlers.onNewChat, onOpen: handlers.onOpenChat });
     render();
   });
 

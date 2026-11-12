@@ -45,16 +45,6 @@ function treeHTML(v) {
     : `<div class="empty"><div class="circle-icon">${icon('folder')}</div><h2>No knowledge yet.</h2><p>Create a category, add a sub category, then add text files.</p></div>`;
 }
 
-/** The File menu: every way to open an agent or add to its knowledge base starts here and opens its own popup. */
-function fileMenuHTML(v) {
-  const { kb } = v;
-  const noCats = !kb.categories.length;
-  const noSubs = !kb.categories.some((c) => c.subcategories.length);
-  const item = (id, label, disabled = false) =>
-    `<button type="button" role="menuitem" class="kb-menu-item" id="${id}" ${disabled ? 'disabled' : ''}>${label}</button>`;
-  return `<div class="kb-file-menu"><button type="button" class="btn" id="file-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="file-menu">File<span class="kb-caret" aria-hidden="true">▾</span></button><div class="kb-menu" id="file-menu" role="menu" aria-label="File" hidden>${item('open-agent', 'Open agent')}${item('open-add-category', 'Add category')}${item('open-add-sub', 'Add subcategory', noCats)}${item('open-add-file', 'Add file', noSubs)}</div></div>`;
-}
-
 /** The size of a file against the limit, its version, and why there is a limit. */
 export const sizeHintHTML = (bytes, version) =>
   `<p class="kb-size small ${bytes > MAX_DOCUMENT_BYTES ? 'over' : ''}" id="doc-size"><span id="doc-size-text">${formatSize(bytes)} of ${formatSize(MAX_DOCUMENT_BYTES)}</span>${version ? ` · version ${esc(version)}` : ''} · The whole file is sent to the model, so a file is limited to ${formatSize(MAX_DOCUMENT_BYTES)}. Split longer text into smaller files. This tool does not support semantic search.</p>`;
@@ -114,8 +104,7 @@ let treeWidth = 0;
 export function agentsPageHTML(v) {
   const { agents, agentId, kb, filter } = v;
   const agent = agents.find((a) => a.id === agentId);
-  return `<div class="page-heading kb-page-heading">${fileMenuHTML(v)}</div><hr class="kb-rule">
-  <div class="kb-layout" id="kb-layout" ${treeWidth ? `style="--kb-tree-w:${treeWidth}px"` : ''}>
+  return `<div class="kb-layout" id="kb-layout" ${treeWidth ? `style="--kb-tree-w:${treeWidth}px"` : ''}>
     <section class="panel kb-tree-panel" aria-label="Knowledge base">
       <div class="panel-head kb-head"><div><h2>${esc(agent.name)} knowledge base</h2><p>${kb.categories.length} ${kb.categories.length === 1 ? 'category' : 'categories'} · ${plural(countDocuments(kb), 'file')}</p></div><div class="kb-head-tools"><label class="sr-only" for="status-filter">Filter by status</label><select class="model-select" id="status-filter"><option value="">All statuses</option>${STATUSES.map((s) => `<option value="${s.id}" ${s.id === filter ? 'selected' : ''}>${esc(s.label)}</option>`).join('')}</select><button type="button" class="btn" id="reset-kb">Restore defaults</button></div></div>
       <div class="kb-tree" id="kb-tree">${treeHTML(v)}</div>
@@ -127,44 +116,6 @@ export function agentsPageHTML(v) {
 
 const $ = (id) => document.getElementById(id);
 const all = (sel) => [...document.querySelectorAll(sel)];
-
-/** Wire a freshly rendered agents page to controller handlers. */
-export function bindFileMenu(h) {
-  const btn = $('file-menu-btn');
-  const menu = $('file-menu');
-  const setOpen = (open) => {
-    menu.hidden = !open;
-    btn.setAttribute('aria-expanded', open);
-  };
-  btn.onclick = () => {
-    setOpen(menu.hidden);
-    if (!menu.hidden) menu.querySelector('button:not(:disabled)')?.focus();
-  };
-  const items = [...menu.querySelectorAll('button')];
-  [['open-agent', 'agent'], ['open-add-category', 'category'], ['open-add-sub', 'sub'], ['open-add-file', 'file']].forEach(([id, kind]) => {
-    $(id).onclick = () => {
-      setOpen(false);
-      h.onOpenModal(kind);
-    };
-  });
-  menu.onkeydown = (e) => {
-    const enabled = items.filter((b) => !b.disabled);
-    const at = enabled.indexOf(document.activeElement);
-    if (e.key === 'ArrowDown') enabled[(at + 1) % enabled.length]?.focus();
-    else if (e.key === 'ArrowUp') enabled[(at - 1 + enabled.length) % enabled.length]?.focus();
-    else return;
-    e.preventDefault();
-  };
-  document.onmousedown = (e) => {
-    if (!menu.hidden && !e.target.closest?.('.kb-file-menu')) setOpen(false);
-  };
-  document.onkeydown = (e) => {
-    if (e.key === 'Escape' && !menu.hidden) {
-      setOpen(false);
-      btn.focus();
-    }
-  };
-}
 
 /** Drag (or use the arrow keys on) the handle between the two panels to change the knowledge base panel's width. */
 function bindResizer() {
@@ -203,7 +154,6 @@ function bindResizer() {
 
 export function bindAgents(h) {
   bindResizer();
-  bindFileMenu(h);
   $('status-filter').onchange = (e) => h.onFilter(e.target.value);
   $('reset-kb').onclick = h.onReset;
   all('details[data-node]').forEach((d) => (d.ontoggle = () => h.onToggleNode(d.dataset.node, d.open)));

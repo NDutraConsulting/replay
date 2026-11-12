@@ -43,3 +43,5 @@ we need to use the left side slider button like the one used in the replay tab
 <button class="prompts-restore visible" id="show-prompts" aria-label="Show your prompts" aria-controls="prompts-panel" aria-expanded="false"><span class="restore-plus" aria-hidden="true">+</span><span>Your prompts</span></button>
 
 It should say Select Replays.
+
+###

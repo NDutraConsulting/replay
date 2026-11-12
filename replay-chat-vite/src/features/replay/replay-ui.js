@@ -3,7 +3,6 @@
 // chat (the replay's source chat, with all its messages), diffA, diffB, models, connected, prompts (that chat's user prompts), agents ([{id, name}]),
 // savedDetails ({id: full saved replay}, loaded on demand for the Diff tab).
 // savedReplays are summaries: {id, runId, slot, model, agentId, completed, sourceConversationId, promptCount, responseCount, createdAt}.
-import { fileMenuHTML } from '../../shared/file-menu-ui.js';
 import { STEP_HEADING, decisionTreeHTML, decisionTreeIfAny, kbNotesHTML, traceLines } from '../../shared/decision-tree-ui.js';
 import { CALL_HEADING, callDiffText, purposeLabel } from '../../shared/api-log-ui.js';
 import { CLIFF_THRESHOLD, cliffTip, divergenceSummary, divergenceTip, findCliffs, findDivergence } from '../../shared/logprob-cliffs.js';
@@ -39,7 +38,7 @@ export const openReplayIntro = () =>
 
 export function replayPageHTML(v){
   const {replay,replayTab,replayBusy,playing,activeResult,promptsHidden,chat,savedReplays,diffA,diffB,models,connected,prompts,agents,savedDetails}=v;
-  return `${fileMenuHTML({ withNew: false })}<div class="page-heading replay-status-row">${replayBusy?'<span class="badge"><span class="dot"></span>Replay in progress</span>':modeBadgeHTML(connected)}</div>${replayTabsHTML(v)}<section id="workspace-content" role="tabpanel" aria-labelledby="tab-${replayTab}">${replayTab==='replay'?replayBodyHTML(v):replayTab==='history'?historyHTML(v):diffHTML(v)}</section>${footerHTML()}`;
+  return `<div class="page-heading replay-status-row">${replayBusy?'<span class="badge"><span class="dot"></span>Replay in progress</span>':modeBadgeHTML(connected)}</div>${replayTabsHTML(v)}<section id="workspace-content" role="tabpanel" aria-labelledby="tab-${replayTab}">${replayTab==='replay'?replayBodyHTML(v):replayTab==='history'?historyHTML(v):diffHTML(v)}</section>${footerHTML()}`;
 }
 /** The replay's settings (the chat's, read-only, and the replay's own), shown in the File > Config popup. */
 export function replayConfigHTML(v){

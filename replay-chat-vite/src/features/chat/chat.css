@@ -75,3 +75,12 @@
 @media(max-width:780px){.conversation-name h2{max-width:24ch}.chat-title{flex:1}}
 .composer-hint.full{color:#9c1c14;font-weight:600}
 .composer textarea:disabled{cursor:not-allowed;opacity:.6}
+/* the conversation's settings: their own collapsible, closed by default */
+.side-settings{padding:0 20px;border-bottom:1px solid var(--line)}
+.side-settings>summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;padding:12px 0;font-size:13px;font-weight:600}
+.side-settings>summary::-webkit-details-marker{display:none}
+.side-settings>summary::before{content:"›";display:inline-block;width:10px;color:var(--muted);transition:transform .15s}
+.side-settings[open]>summary::before{transform:rotate(90deg)}
+.side-settings-list{margin:0;padding:0 0 14px 16px;list-style:disc;font-size:9px;line-height:1.7}
+.side-settings-list b{font-weight:700}
+.side-settings-list b::after{content:': '}

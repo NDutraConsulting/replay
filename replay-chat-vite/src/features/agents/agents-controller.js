@@ -1,6 +1,7 @@
 import '../../shared/styles/base.css';
 import './agents.css';
 import { choiceDialog, noticeDialog } from '../../shared/modal-ui.js';
+import { mountAgentsFileMenu } from './agents-file-menu.js';
 import { startPage } from '../../shared/shell-ui.js';
 import { toast, toastError } from '../../shared/toast.js';
 import {
@@ -61,6 +62,7 @@ export const initAgents = ({
 
     const render = () => {
       main.innerHTML = agentsPageHTML(state);
+      mountAgentsFileMenu(state.kb, handlers); // Add subcategory / Add file depend on what the tree holds
       bindAgents(handlers);
       bindModal(handlers);
       if (state.modal) focusModal();

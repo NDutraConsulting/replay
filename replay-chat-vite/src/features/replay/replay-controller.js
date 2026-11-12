@@ -10,7 +10,7 @@ import { openChatPicker } from '../../shared/chat-picker-ui.js';
 import { enableHoverTips } from '../../shared/hover-tip.js';
 import { CLIFF_THRESHOLD, parseThreshold } from '../../shared/logprob-cliffs.js';
 import { parseTemperature } from '../../shared/temperature.js';
-import { bindFileMenu } from '../../shared/file-menu-ui.js';
+import { mountReplayFileMenu } from './replay-file-menu.js';
 import { startPage } from '../../shared/shell-ui.js';
 import { showModal } from '../../shared/modal-ui.js';
 import { toast, toastError } from '../../shared/toast.js';
@@ -160,7 +160,6 @@ export const initReplay = () =>
     function render() {
       normalizeDiff(state, openChatReplays());
       main.innerHTML = replayPageHTML(view());
-      bindFileMenu({ onConfig: openConfig, onOpen: () => historyHandlers.onOpenChat() });
       refreshConfig();
       bindTabs((tab) => {
         state.replayTab = tab;
@@ -446,6 +445,7 @@ export const initReplay = () =>
       },
     };
 
+    mountReplayFileMenu({ onConfig: openConfig, onOpen: () => historyHandlers.onOpenChat() });
     render();
     openReplayIntro(); // what this page is for, shown each time it opens
   });
