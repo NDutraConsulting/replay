@@ -105,3 +105,9 @@ cd replay-chat-vite && npm run test:live   # drives every page against a real ba
 | AI agents | `/agents.html`  | Edit an agent's knowledge base. File menu: Open agent and the Add items.                |
 | Account   | `/account.html` | Your APIs and their models.                                                             |
 | Login     | `/login.html`   | Sign in or sign up.                                                                     |
+
+## License
+
+Replay Chat is released under the [Apache License, Version 2.0](LICENSE); see [NOTICE](NOTICE) for the copyright notice. You
+can use it, change it and build a class or a product on it. If you share a changed version, keep the license and the notice,
+and say which files you changed. The packages it depends on keep their own licenses.

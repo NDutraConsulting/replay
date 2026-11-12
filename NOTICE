@@ -1,0 +1,8 @@
+Replay Chat
+Copyright 2026 Nikko Dutra Bouck
+
+This product includes software developed by Nikko Dutra Bouck.
+
+Replay Chat is licensed under the Apache License, Version 2.0 (see LICENSE). The packages it depends on, such as FastAPI,
+Starlette, httpx, Vite and Vitest, are separate works under their own licenses (MIT, BSD, Apache 2.0, ISC and MPL-2.0 for
+certifi) and are not part of this repository.
