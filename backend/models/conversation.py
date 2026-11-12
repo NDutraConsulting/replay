@@ -43,7 +43,9 @@ class Conversation(BaseModel):
     reasoning_level: ReasoningLevel = "default"
     temperature: float = 0.0
     kb_summary_tool: bool = False
-    """Fixed at creation: agent, model, reasoning level, temperature and this switch. Only the name can change."""
+    """Fixed at creation: agent, model, reasoning level, temperature and these two switches. Only the name can change."""
+    brief_replies: bool = False
+    """Append "Respond in 100 words or less." to the end of each request (services/history_service.BRIEF_REPLY_INSTRUCTION)."""
     source_conversation_id: str | None = None
     """Set on a conversation started by Compact: the conversation it summarises."""
     created_at: datetime
@@ -83,6 +85,9 @@ class ConversationView(BaseModel):
     reasoning_level: ReasoningLevel
     temperature: float
     kb_summary_tool: bool
+    brief_replies: bool
+    brief_instruction: str
+    """The exact text added to the end of each request when `brief_replies` is on, so the page can show what is sent."""
     source_conversation_id: str | None
     created_at: datetime
     max_user_prompts: int
@@ -101,6 +106,7 @@ class ConversationSummary(BaseModel):
     reasoning_level: ReasoningLevel
     temperature: float
     kb_summary_tool: bool
+    brief_replies: bool
     source_conversation_id: str | None
     prompt_count: int
     created_at: datetime
@@ -119,6 +125,7 @@ class NewConversationRequest(BaseModel):
     """0 to 2. 0 is the least random. A reasoning model takes it only when the reasoning level is none; otherwise it is not
     sent (services/OpenAI_API_Model_rules.py decides, and the API log says so)."""
     kb_summary_tool: bool = False
+    brief_replies: bool = False
 
 
 class UpdateConversationRequest(BaseModel):
@@ -130,6 +137,7 @@ class UpdateConversationRequest(BaseModel):
     reasoning_level: ReasoningLevel | None = None
     temperature: float | None = None
     kb_summary_tool: bool | None = None
+    brief_replies: bool | None = None
 
 
 class SendMessageRequest(BaseModel):

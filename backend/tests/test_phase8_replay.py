@@ -59,8 +59,18 @@ def test_a_run_started_from_a_conversation_begins_from_its_settings(replay):
     client.post(f"/api/conversations/{cid}/messages", json={"content": "first prompt"})
     run = client.post("/api/replay-runs", json={"conversation_id": cid}).json()
     assert run["agent_id"] == "research" and run["model_a"] == "m2" and run["model_b"] == "Default::m1"
-    assert run["reasoning_level"] == "high" and run["kb_summary_tool"] is True
+    assert (
+        run["reasoning_level"] == "none" and run["kb_summary_tool"] is True
+    )  # reasoning always starts off on a replay
     assert run["prompts"] == ["first prompt"] and run["context_summary"] is None
+
+
+def test_a_replay_starts_with_reasoning_none_even_when_its_chat_used_another_level(replay):
+    client, _ = replay
+    for level in ("default", "low", "xhigh"):
+        cid = new_chat(client, reasoning_level=level)
+        client.post(f"/api/conversations/{cid}/messages", json={"content": "p"})
+        assert client.post("/api/replay-runs", json={"conversation_id": cid}).json()["reasoning_level"] == "none"
 
 
 def test_the_request_can_override_the_conversations_settings(replay):
@@ -74,10 +84,10 @@ def test_the_request_can_override_the_conversations_settings(replay):
     assert run["kb_summary_tool"] is False and run["reasoning_level"] == "low" and run["model_a"] == "m1"
 
 
-def test_a_run_from_plain_prompts_defaults_to_off_and_default_reasoning(replay):
+def test_a_run_from_plain_prompts_defaults_to_off_and_no_reasoning(replay):
     client, _ = replay
     run = make_run(client)
-    assert run["kb_summary_tool"] is False and run["reasoning_level"] == "default"
+    assert run["kb_summary_tool"] is False and run["reasoning_level"] == "none"
 
 
 def test_the_switch_can_change_until_the_run_starts_and_is_locked_after(replay):

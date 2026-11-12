@@ -11,6 +11,7 @@ Sending is a small state machine driven by the status tag on the user's message:
 """
 
 import asyncio
+import logging
 import uuid
 from datetime import UTC, datetime
 
@@ -30,8 +31,9 @@ from models.conversation import (
     UpdateConversationRequest,
 )
 from models.decision import DecisionStep
+from models.replay_run import ApiCall, ApiLog, ApiLogTurn
 from models.user import User
-from repositories import conversation_repository, kb_choice_repository, message_repository
+from repositories import chat_api_log_repository, conversation_repository, kb_choice_repository, message_repository
 from services import (
     demo_response_service,
     history_service,
@@ -40,6 +42,8 @@ from services import (
     settings_service,
     summary_service,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _stopped() -> AppError:
@@ -119,6 +123,8 @@ async def _view(settings: Settings, user: User, conversation: Conversation) -> C
         reasoning_level=conversation.reasoning_level,
         temperature=conversation.temperature,
         kb_summary_tool=conversation.kb_summary_tool,
+        brief_replies=conversation.brief_replies,
+        brief_instruction=history_service.BRIEF_REPLY_INSTRUCTION,
         source_conversation_id=conversation.source_conversation_id,
         created_at=conversation.created_at,
         max_user_prompts=settings.MAX_USER_PROMPTS,
@@ -162,6 +168,7 @@ async def list_conversations(settings: Settings, user: User) -> list[Conversatio
             reasoning_level=c.reasoning_level,
             temperature=c.temperature,
             kb_summary_tool=c.kb_summary_tool,
+            brief_replies=c.brief_replies,
             source_conversation_id=c.source_conversation_id,
             prompt_count=count,
             created_at=c.created_at,
@@ -190,6 +197,7 @@ async def new_conversation(settings: Settings, user: User, request: NewConversat
         reasoning_level=request.reasoning_level,
         temperature=request.temperature,
         kb_summary_tool=request.kb_summary_tool,
+        brief_replies=request.brief_replies,
     )
     return await _view(settings, user, conversation)
 
@@ -201,7 +209,7 @@ async def update(
     conversation = await _owned(settings, user, conversation_id)
     fixed = [
         field
-        for field in ("agent_id", "model", "reasoning_level", "temperature", "kb_summary_tool")
+        for field in ("agent_id", "model", "reasoning_level", "temperature", "kb_summary_tool", "brief_replies")
         if getattr(request, field) is not None
     ]
     if fixed:
@@ -262,6 +270,43 @@ async def _attach_document(
         )
 
 
+async def _log_calls(settings: Settings, user: User, conversation_id: str, request_id: str, calls: list[dict]) -> None:
+    """Keep the raw REST calls made for this prompt (Log.db), so the chat can show what was sent. A missing log must never
+    fail a prompt, so a problem here is only logged."""
+    try:
+        await chat_api_log_repository.record_request(
+            settings.LOG_DB_PATH, user.user_id, conversation_id, request_id, calls
+        )
+    except Exception:
+        logger.exception("Could not log the API calls for %s", request_id)
+
+
+async def get_api_log(settings: Settings, user: User, conversation_id: str) -> ApiLog:
+    """What the Chat page sent to the model provider, prompt by prompt: the raw REST calls (the API key is never in
+    them). Only prompts still in the conversation are listed (a rewound prompt's calls are gone with it). A conversation
+    from before the log existed has `recorded` false."""
+    conversation = await _owned(settings, user, conversation_id)
+    messages = await message_repository.list_visible(settings.DATABASE_PATH, conversation_id)
+    logged = await chat_api_log_repository.for_conversation(settings.LOG_DB_PATH, user.user_id, conversation_id)
+    turns = [
+        ApiLogTurn(
+            turn_index=index,
+            prompt=m.content,
+            calls=[ApiCall(**call) for call in logged.get(m.request_id or "", [])],
+        )
+        for index, m in enumerate(m for m in messages if m.role == "user" and m.message_type == "chat")
+    ]
+    return ApiLog(
+        id=conversation.conversation_id,
+        recorded=bool(logged),
+        model=conversation.model,
+        temperature=conversation.temperature,
+        logprobs=False,
+        reasoning_level=conversation.reasoning_level,
+        turns=turns,
+    )
+
+
 async def send_message(
     settings: Settings, user: User, conversation_id: str, request: SendMessageRequest
 ) -> SendMessageResponse:
@@ -289,64 +334,73 @@ async def send_message(
     )
     if already_stopped:
         raise _stopped()  # the stop command arrived first: the prompt is saved, the model is never called
+    calls: list[dict] = []
     try:
-        # Walk the agent's knowledge base: what it was offered and chose is recorded (and shown with the answer),
-        # and the selections from earlier answered turns of this conversation are shown to it as a hint.
-        answered = await message_repository.answered_request_ids(settings.DATABASE_PATH, conversation_id)
-        previous = await kb_choice_repository.last_chat_path(
-            settings.KNOWLEDGE_DB_PATH, user.user_id, conversation_id, answered
-        )
-        routing = await kb_routing_service.route(
-            settings,
-            user,
-            agent.agent_id,
-            provider,
-            provider.model,
-            content,
-            previous,
-            reasoning_effort=summary_service.effort(conversation.reasoning_level),
-            temperature=conversation.temperature,
-        )
-        if routing.steps:
-            await kb_choice_repository.record_path(
-                settings.KNOWLEDGE_DB_PATH,
-                user.user_id,
-                agent.agent_id,
-                "chat",
-                conversation_id,
-                request_id,
-                routing.steps,
-            )
-        await _attach_document(settings, conversation, provider, request_id, routing)
-        if provider.connected:
-            reply = await llm_service.complete(
-                base_url=provider.base_url,
-                api_key=provider.api_key,
-                model=provider.model,
-                system=agent.system_prompt,
-                messages=await history_service.for_conversation(settings, conversation_id),
-                timeout=settings.LLM_TIMEOUT_SECONDS,
-                block_private=settings.BLOCK_PRIVATE_LLM_URLS,
-                reasoning_effort=summary_service.effort(conversation.reasoning_level),
-                temperature=conversation.temperature,
-            )
-        else:
-            if settings.DEMO_DELAY_SECONDS > 0:
-                await asyncio.sleep(settings.DEMO_DELAY_SECONDS)
-            reply = demo_response_service.demo_response(
-                await history_service.for_conversation(settings, conversation_id, plain=True),
-                conversation.model,
-                agent.agent_id,
-                provider.models,
-                source=kb_routing_service.demo_source(routing),
-            )
-    except Exception:
-        # a failed or stopped turn must not leave its file behind to be sent again with the next prompt
-        await message_repository.delete_kb_rows(settings.DATABASE_PATH, conversation_id, request_id)
-        status = await message_repository.mark_failed(settings.DATABASE_PATH, user_message.message_id)
-        if status == "stopped":
-            raise _stopped() from None  # the user cancelled; the provider error no longer matters
-        raise
+        with llm_service.collect_calls() as collected:
+            calls = collected
+            try:
+                # Walk the agent's knowledge base: what it was offered and chose is recorded (and shown with the answer),
+                # and the selections from earlier answered turns of this conversation are shown to it as a hint.
+                answered = await message_repository.answered_request_ids(settings.DATABASE_PATH, conversation_id)
+                previous = await kb_choice_repository.last_chat_path(
+                    settings.KNOWLEDGE_DB_PATH, user.user_id, conversation_id, answered
+                )
+                routing = await kb_routing_service.route(
+                    settings,
+                    user,
+                    agent.agent_id,
+                    provider,
+                    provider.model,
+                    content,
+                    previous,
+                    reasoning_effort=summary_service.effort(conversation.reasoning_level),
+                    temperature=conversation.temperature,
+                )
+                if routing.steps:
+                    await kb_choice_repository.record_path(
+                        settings.KNOWLEDGE_DB_PATH,
+                        user.user_id,
+                        agent.agent_id,
+                        "chat",
+                        conversation_id,
+                        request_id,
+                        routing.steps,
+                    )
+                await _attach_document(settings, conversation, provider, request_id, routing)
+                if provider.connected:
+                    reply = await llm_service.complete(
+                        base_url=provider.base_url,
+                        api_key=provider.api_key,
+                        model=provider.model,
+                        system=agent.system_prompt,
+                        messages=await history_service.for_conversation(
+                            settings, conversation_id, brief=conversation.brief_replies
+                        ),
+                        timeout=settings.LLM_TIMEOUT_SECONDS,
+                        block_private=settings.BLOCK_PRIVATE_LLM_URLS,
+                        reasoning_effort=summary_service.effort(conversation.reasoning_level),
+                        temperature=conversation.temperature,
+                    )
+                else:
+                    if settings.DEMO_DELAY_SECONDS > 0:
+                        await asyncio.sleep(settings.DEMO_DELAY_SECONDS)
+                    reply = demo_response_service.demo_response(
+                        await history_service.for_conversation(settings, conversation_id, plain=True),
+                        conversation.model,
+                        agent.agent_id,
+                        provider.models,
+                        source=kb_routing_service.demo_source(routing),
+                    )
+            except Exception:
+                # a failed or stopped turn must not leave its file behind to be sent again with the next prompt
+                await message_repository.delete_kb_rows(settings.DATABASE_PATH, conversation_id, request_id)
+                status = await message_repository.mark_failed(settings.DATABASE_PATH, user_message.message_id)
+                if status == "stopped":
+                    raise _stopped() from None  # the user cancelled; the provider error no longer matters
+                raise
+
+    finally:
+        await _log_calls(settings, user, conversation_id, request_id, calls)
 
     outcome, user_stored, assistant = await message_repository.finish_reply(
         settings.DATABASE_PATH,
@@ -366,12 +420,20 @@ async def send_message(
     raise _stopped()
 
 
+async def _forget_calls(settings: Settings, user: User, request_ids: list[str]) -> None:
+    try:
+        await chat_api_log_repository.delete_requests(settings.LOG_DB_PATH, user.user_id, request_ids)
+    except Exception:
+        logger.exception("Could not forget the API calls of rewound prompts")
+
+
 async def rewind(settings: Settings, user: User, conversation_id: str) -> RewindResponse:
     conversation = await _owned(settings, user, conversation_id)
     removed = await message_repository.rewind(settings.DATABASE_PATH, conversation_id)
     if removed is None:
         raise conflict("nothing_to_rewind", "There is no prompt to rewind.")
     prompt, removed_request_ids = removed
+    await _forget_calls(settings, user, removed_request_ids)
     # the rewound prompts' knowledge-base choices go with them (they must not steer the next answer)
     await kb_choice_repository.delete_chat(
         settings.KNOWLEDGE_DB_PATH, user.user_id, conversation_id, removed_request_ids
@@ -411,6 +473,7 @@ async def compact(settings: Settings, user: User, conversation_id: str) -> Conve
         reasoning_level=conversation.reasoning_level,
         temperature=conversation.temperature,
         kb_summary_tool=conversation.kb_summary_tool,
+        brief_replies=conversation.brief_replies,
         source_conversation_id=conversation.conversation_id,
         opening={
             "role": "assistant",

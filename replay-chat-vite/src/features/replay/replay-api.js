@@ -29,6 +29,7 @@ export const toReplay = (run) => ({
   reasoningLevel: run.reasoning_level ?? 'default',
   temperature: run.temperature ?? 0,
   logprobs: run.logprobs ?? false, // log probabilities requested in every response of the run
+  briefReplies: run.brief_replies ?? false, // "Respond in 100 words or less." added to the end of each request
   contextSummary: run.context_summary ?? null, // set when the replayed conversation began with a compacted summary
   sourceConversationId: run.source_conversation_id ?? null, // the chat this run was started from
   results: { a: run.results.a.map(toResult), b: run.results.b.map(toResult) },
@@ -47,6 +48,7 @@ export const toSummary = (s) => ({
   reasoningLevel: s.reasoning_level ?? 'default',
   temperature: s.temperature ?? 0, // the setting the run used (the Diff shows it)
   logprobs: s.logprobs ?? false,
+  briefReplies: s.brief_replies ?? false,
   sourceConversationId: s.source_conversation_id ?? null, // the chat it came from (null: an older replay)
   promptCount: s.prompt_count,
   responseCount: s.response_count,
@@ -83,7 +85,7 @@ export async function currentRun() {
 export const createRun = async (body = {}) => toReplay(await api.post('/api/replay-runs', body));
 
 /** Change models, agent, KB summary tool, reasoning level, temperature or log probabilities. Only allowed before the first step (409 `replay_locked` after). */
-export const updateRun = async (runId, { modelA, modelB, agentId, kbSummaryTool, reasoningLevel, temperature, logprobs }) => {
+export const updateRun = async (runId, { modelA, modelB, agentId, kbSummaryTool, reasoningLevel, temperature, logprobs, briefReplies }) => {
   const body = {};
   if (modelA !== undefined) body.model_a = modelA;
   if (modelB !== undefined) body.model_b = modelB;
@@ -92,6 +94,7 @@ export const updateRun = async (runId, { modelA, modelB, agentId, kbSummaryTool,
   if (reasoningLevel !== undefined) body.reasoning_level = reasoningLevel;
   if (temperature !== undefined) body.temperature = temperature;
   if (logprobs !== undefined) body.logprobs = logprobs;
+  if (briefReplies !== undefined) body.brief_replies = briefReplies;
   return toReplay(await api.patch(`/api/replay-runs/${runId}`, body));
 };
 

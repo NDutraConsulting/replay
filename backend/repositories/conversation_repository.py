@@ -21,6 +21,7 @@ def _row(row: sqlite3.Row) -> Conversation:
         reasoning_level=row["reasoning_level"],
         temperature=row["temperature"],
         kb_summary_tool=bool(row["kb_summary_tool"]),
+        brief_replies=bool(row["brief_replies"]),
         source_conversation_id=row["source_conversation_id"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
@@ -37,6 +38,7 @@ async def create(
     reasoning_level: str = "default",
     kb_summary_tool: bool = False,
     temperature: float = 0.0,
+    brief_replies: bool = False,
     sample_messages: list[dict] | None = None,
     source_conversation_id: str | None = None,
     opening: dict | None = None,
@@ -50,8 +52,8 @@ async def create(
         stamp = _now()
         conn.execute(
             "INSERT INTO conversations (conversation_id, user_id, is_sample, name, agent_id, model, reasoning_level, "
-            "kb_summary_tool, source_conversation_id, created_at, updated_at, temperature) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "kb_summary_tool, source_conversation_id, created_at, updated_at, temperature, brief_replies) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 conversation_id,
                 user_id,
@@ -65,6 +67,7 @@ async def create(
                 stamp,
                 stamp,
                 temperature,
+                int(brief_replies),
             ),
         )
         if opening is not None:

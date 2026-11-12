@@ -488,6 +488,34 @@ def test_the_runs_temperature_is_sent_with_each_replayed_prompt_and_shown_on_sav
     assert saved and all(s["temperature"] == 0.9 for s in saved)
 
 
+# ---- brief replies: the chat's switch is carried into the run, so both models get the same instruction
+def test_a_run_starts_from_its_chats_brief_replies_and_can_change_them_before_the_first_step(logged_in_client):
+    cid = logged_in_client.post(
+        "/api/conversations", json={"name": "B", "agent_id": "assistant", "model": "model-a", "brief_replies": True}
+    ).json()["conversation_id"]
+    run = run_of(create(logged_in_client, conversation_id=cid))
+    assert run["brief_replies"] is True
+    changed = logged_in_client.patch(f"/api/replay-runs/{run['replay_run_id']}", json={"brief_replies": False})
+    assert changed.status_code == 200 and changed.json()["brief_replies"] is False
+    assert run_of(create(logged_in_client, conversation_id=cid, brief_replies=False))["brief_replies"] is False
+    assert run_of(create(logged_in_client, prompts=["x"]))["brief_replies"] is False
+
+
+def test_the_instruction_is_sent_with_each_replayed_prompt_and_shown_on_saved_replays(logged_in_client, llm_stub):
+    connect(logged_in_client)
+    cid = logged_in_client.post(
+        "/api/conversations", json={"name": "B", "agent_id": "assistant", "model": "m1", "brief_replies": True}
+    ).json()["conversation_id"]
+    logged_in_client.post(f"/api/conversations/{cid}/messages", json={"content": "hello"})
+    llm_stub.calls.clear()
+    run = run_of(create(logged_in_client, conversation_id=cid))
+    play_all(logged_in_client, run)
+    answers = [c for c in llm_stub.calls if c["messages"] and c["messages"][-1]["role"] == "user"]
+    assert answers and all(c["messages"][-1]["content"].endswith("Respond in 100 words or less.") for c in answers[-2:])
+    saved = logged_in_client.get("/api/saved-replays").json()
+    assert saved and all(s["brief_replies"] is True for s in saved)
+
+
 # ---- the raw API log of a saved replay
 def saved_ids(client):
     return [s["id"] for s in client.get("/api/saved-replays").json()]

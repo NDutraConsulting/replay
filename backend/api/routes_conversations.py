@@ -14,6 +14,7 @@ from models.conversation import (
     StopMessageRequest,
     UpdateConversationRequest,
 )
+from models.replay_run import ApiLog
 from models.user import User
 
 router = APIRouter()
@@ -51,6 +52,13 @@ async def update_conversation(
     user: User = Depends(get_current_user),
 ):
     return await controller.update(settings, user, conversation_id, request)
+
+
+@router.get("/api/conversations/{conversation_id}/api-log", response_model=ApiLog)
+async def get_api_log(
+    conversation_id: str, settings: Settings = Depends(get_settings), user: User = Depends(get_current_user)
+):
+    return await controller.get_api_log(settings, user, conversation_id)
 
 
 @router.post("/api/conversations/{conversation_id}/open", response_model=ConversationView)

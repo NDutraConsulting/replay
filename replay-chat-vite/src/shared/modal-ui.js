@@ -59,7 +59,8 @@ const frame = (title, inner, wide, className = '') =>
  * @param {{title: string, bodyHTML: string, submitLabel?: string, cancelLabel?: string|null, wide?: boolean, className?: string,
  *   onSubmit?: (form: HTMLFormElement) => (string|void|Promise<string|void>), onMount?: (form: HTMLFormElement, handle: object) => void,
  *   onDismiss?: () => void}} options
- *   `onSubmit` may return a message (shown in the popup, which stays open) or nothing (the popup closes).
+ *   `onSubmit` may return a message (shown in the popup, which stays open), `false` (stays open, no message: the popup
+ *   changed step) or nothing (the popup closes).
  * @returns {{close: () => void, form: HTMLFormElement, setError: (message: string) => void}}
  */
 export function showModal({ title, bodyHTML, submitLabel = 'OK', cancelLabel = 'Cancel', wide = false, className = '', onSubmit, onMount, onDismiss }) {
@@ -85,6 +86,7 @@ export function showModal({ title, bodyHTML, submitLabel = 'OK', cancelLabel = '
     setError('');
     try {
       const problem = await onSubmit?.(form);
+      if (problem === false) return; // the popup moved to another step: it stays open, with no message
       if (problem) setError(problem);
       else close();
     } finally {

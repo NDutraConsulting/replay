@@ -59,6 +59,7 @@ export const initReplay = () =>
       savedReplays: data.saved,
       savedDetails: {}, // id -> full saved replay, loaded on demand for the Diff tab
       cliffThreshold: CLIFF_THRESHOLD, // how big a drop in log probability the Diff marks as a cliff (adjustable there)
+      modelDiffOpen: false, // the Diff's Model Diff collapsible
       selectorsHidden: false, // the Diff's Select Replays panel, slid into the left edge
       diffView: 'chat', // the Diff tab shows the answers as chat, or the API logs behind them
       apiLogs: {}, // id -> the raw REST calls behind a saved replay, loaded when the API logs view is opened
@@ -67,7 +68,7 @@ export const initReplay = () =>
       activeResult: 'a',
       diffA: '',
       diffB: '',
-      diffChosen: false, // true once the user picks a pair; until then the Diff follows the newest saved replays
+      diffChosen: false, // true once the user picks a pair; until then, and whenever a replay finishes, the Diff follows the newest saved replays
       replayBusy: false,
       playing: false,
       stepped: false, // the Model responses panel shows only once Step through is used
@@ -85,6 +86,7 @@ export const initReplay = () =>
       reasoningLevel: chat.reasoning_level,
       temperature: chat.temperature ?? 0,
       kbSummaryTool: chat.kb_summary_tool,
+      briefReplies: chat.brief_replies ?? false,
     });
     const view = () => ({ ...state, models, connected: app.settings.connected, prompts: chatPrompts, chat, conversation: conversationSettings() });
     const remember = (changes) => savePreferences(changes).catch(toastError);
@@ -255,6 +257,7 @@ export const initReplay = () =>
         reasoning_level: changes.reasoningLevel ?? run.reasoningLevel,
         temperature: changes.temperature ?? run.temperature,
         logprobs: changes.logprobs ?? run.logprobs,
+        brief_replies: changes.briefReplies ?? run.briefReplies,
         ...(run.sourceConversationId ? { source_conversation_id: run.sourceConversationId } : {}), // stays tied to its chat
       };
     }
@@ -269,7 +272,10 @@ export const initReplay = () =>
       let ok = true;
       try {
         state.replay = await stepRun(state.replay.runId, state.replay.cursor, state.stepRequestId, state.abort.signal);
-        if (state.replay.cursor === state.replay.prompts.length) await refreshSaved();
+        if (state.replay.cursor === state.replay.prompts.length) {
+          state.diffChosen = false; // a replay just finished: the Diff moves to it (its A and B), even if a pair was picked before
+          await refreshSaved();
+        }
         else {
           state.savedDetails = {};
           state.savedLogprobs = {};
@@ -310,6 +316,7 @@ export const initReplay = () =>
       },
       onKbSummary: (on) => configure({ kbSummaryTool: on }),
       onLogprobs: (on) => configure({ logprobs: on }),
+      onBriefReplies: (on) => configure({ briefReplies: on }),
       onModels: ([modelA, modelB]) => configure({ modelA, modelB }),
       onResultTab(slot) {
         state.activeResult = slot;
@@ -361,22 +368,88 @@ export const initReplay = () =>
         } catch (err) {
           return toastError(err);
         }
-        openChatPicker(chats, state.agents, chat.conversation_id, async (id) => {
-          const previous = { chat, chatPrompts };
-          try {
-            chat = await openConversation(id);
-            chatPrompts = userPrompts(chat.messages);
-            const [modelA, modelB] = state.replay.selected;
-            if (!(await startRun({ conversation_id: id, model_a: modelA, model_b: modelB }, null, 'history'))) {
-              ({ chat, chatPrompts } = previous);
-              return 'That chat could not be loaded.';
-            }
-          } catch (err) {
-            ({ chat, chatPrompts } = previous);
-            return err.message;
+        // Step 1 picks the chat; step 2 shows the replay's Config, starting from that chat's settings, and Open starts the run.
+        const [currentA, currentB] = state.replay.selected;
+        const draftOf = (c) => ({
+          cursor: 0,
+          agentId: c.agent_id,
+          reasoningLevel: c.reasoning_level,
+          temperature: c.temperature ?? 0,
+          kbSummaryTool: c.kb_summary_tool,
+          briefReplies: c.brief_replies ?? false,
+          logprobs: false,
+          selected: [models.includes(c.model) ? c.model : currentA, currentB],
+        });
+        /** In step 2, each setting the chat itself has is marked in green: a badge with the chat's value beside its label, and
+         *  the control turns green while it still equals that value (so a change away from the chat shows at once). */
+        const markChatSettings = (form, c) => {
+          const label = (id) => form.querySelector(`label[for="${id}"]`);
+          const fields = [
+            ['replay-agent', c.agent_id, 'select'],
+            ['replay-reasoning', c.reasoning_level, 'select'],
+            ['replay-temperature', String(c.temperature ?? 0), 'number'],
+            ['replay-kb-summary', Boolean(c.kb_summary_tool), 'switch'],
+            ['replay-brief', Boolean(c.brief_replies), 'switch'],
+            ['model-a', c.model, 'select'],
+          ];
+          for (const [id, value, kind] of fields) {
+            const control = form.querySelector(`#${id}`);
+            if (!control) continue;
+            const shown = kind === 'switch' ? (value ? 'On' : 'Off') : kind === 'select' ? [...control.options].find((o) => o.value === value)?.textContent ?? value : value;
+            const badge = document.createElement('span');
+            badge.className = 'chat-value';
+            badge.textContent = `Source Chat: ${shown}`;
+            label(id)?.append(' ', badge);
+            const same = () => (kind === 'switch' ? control.checked === value : kind === 'number' ? Number(control.value) === Number(value) : control.value === value);
+            const update = () => control.classList.toggle('matches-chat', same());
+            control.addEventListener('change', update);
+            control.addEventListener('input', update);
+            update();
           }
-          return undefined;
-        }, { reopenCurrent: true }); // choosing the chat on screen reloads its prompts into a fresh run
+        };
+        const configure = {
+          onMount: markChatSettings,
+          html: (c) =>
+            replayConfigHTML({
+              ...view(),
+              replay: draftOf(c),
+              replayBusy: false,
+              conversation: {
+                name: c.name, agentId: c.agent_id, model: c.model, reasoningLevel: c.reasoning_level,
+                temperature: c.temperature ?? 0, kbSummaryTool: c.kb_summary_tool, briefReplies: c.brief_replies ?? false,
+              }, // fmt: skip
+            }).replace('id="replay-config"', 'id="open-config-step"'), // not the live Config popup's id (it is redrawn from the run)
+          read(form) {
+            const temperature = parseTemperature(form.querySelector('#replay-temperature').value);
+            return {
+              temperature,
+              agent_id: form.querySelector('#replay-agent').value,
+              reasoning_level: form.querySelector('#replay-reasoning').value,
+              kb_summary_tool: form.querySelector('#replay-kb-summary').checked,
+              brief_replies: form.querySelector('#replay-brief').checked,
+              logprobs: form.querySelector('#replay-logprobs').checked,
+              model_a: form.querySelector('#model-a').value,
+              model_b: form.querySelector('#model-b').value,
+            };
+          },
+          async onOpen(id, settings) {
+            if (settings.temperature === null) return 'Temperature must be a number from 0 to 2.';
+            const previous = { chat, chatPrompts };
+            try {
+              chat = await openConversation(id);
+              chatPrompts = userPrompts(chat.messages);
+              if (!(await startRun({ conversation_id: id, ...settings }, null, 'history'))) {
+                ({ chat, chatPrompts } = previous);
+                return 'That chat could not be loaded.';
+              }
+            } catch (err) {
+              ({ chat, chatPrompts } = previous);
+              return err.message;
+            }
+            return undefined;
+          },
+        };
+        openChatPicker(chats, state.agents, chat.conversation_id, null, { reopenCurrent: true, configure });
       },
       /** The raw REST calls behind one saved replay, in a popup (each call is its own collapsible). */
       async onApiLog(id) {
@@ -408,6 +481,9 @@ export const initReplay = () =>
         selectDiff(state, side, id);
         state.diffChosen = true;
         render();
+      },
+      onToggleModelDiff(open) {
+        state.modelDiffOpen = open; // no redraw: the box has already opened or closed
       },
       onToggleSelectors(hidden) {
         state.selectorsHidden = hidden;

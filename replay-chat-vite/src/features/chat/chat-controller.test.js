@@ -68,6 +68,17 @@ function chatServer({ appOverrides = {}, messages = sample(), isSample = true, f
   };
   const mock = mockApi({
     ...routes,
+    'GET /api/conversations/:id/api-log': ({ params }) =>
+      server.apiLog === 'missing'
+        ? apiError(404, 'not_found', 'Conversation not found.')
+        : (server.apiLog ?? {
+            id: params.id, recorded: true, model: 'model-a', temperature: 0, reasoning_level: 'default', logprobs: false,
+            turns: [{ turn_index: 0, prompt: 'first prompt', calls: [{
+              at: '2026-01-01T00:00:00Z', purpose: 'answer', method: 'POST', url: 'https://api.example.com/v1/chat/completions', duration_ms: 30,
+              request: { headers: { Authorization: 'Bearer <redacted>' }, body: { model: 'model-a', messages: [{ role: 'user', content: 'first prompt\n\nRespond in 100 words or less.' }] } },
+              response: { status: 200, body: '{}', truncated: false }, error: null,
+            }] }],
+          }), // fmt: skip
     'GET /api/conversations/current': () => {
       server.order.push('refresh');
       if (server.failRefresh) return apiError(500, 'oops', 'The server hit a problem.');
@@ -165,6 +176,53 @@ describe('chat page', () => {
     document.body.innerHTML = '';
   });
 
+  it('shows the text added to each prompt, apart from what the user wrote, only when Brief replies is on', async () => {
+    await boot({ config: { brief_replies: true, brief_instruction: 'Respond in 100 words or less.' } });
+    const prompts = [...document.querySelectorAll('.message.user')];
+    expect(prompts).toHaveLength(3);
+    for (const prompt of prompts) {
+      const added = prompt.querySelector('.message-appended');
+      expect(added.textContent).toContain('Respond in 100 words or less.');
+      expect(added.textContent).toContain('sent to the model');
+      expect(prompt.querySelector('.message-copy').textContent).not.toContain('Respond in 100 words'); // what the user wrote is untouched
+    }
+    expect(document.querySelectorAll('.message.assistant .message-appended')).toHaveLength(0);
+    await boot();
+    expect(document.querySelectorAll('.message-appended')).toHaveLength(0);
+  });
+
+  it('opens the API log from a button in the replay callout, showing what was sent for each prompt', async () => {
+    const { mock } = await boot();
+    const button = document.querySelector('.replay-callout #chat-api-log');
+    expect(button.textContent).toBe('API log');
+    expect(mock.called('GET /api/conversations/:id/api-log')).toBe(false); // read only when asked for
+    button.click();
+    await settle();
+    expect(mock.calls.at(-1).path).toBe('/api/conversations/c1/api-log');
+    expect(modal().querySelector('h2').textContent).toContain('API log · Sample conversation');
+    expect(modal().querySelectorAll('details.api-call')).toHaveLength(1); // each REST call is its own collapsible
+    expect(modal().textContent).toContain('first prompt');
+    expect(modal().textContent).toContain('Respond in 100 words or less.'); // the appended text, exactly as sent
+    expect(modal().textContent).toContain('Chat temperature');
+  });
+
+  it('says why there is nothing to show for a chat that started before the log existed', async () => {
+    const { server } = await boot();
+    server.apiLog = { id: 'c1', recorded: false, model: 'model-a', temperature: 0, reasoning_level: 'default', logprobs: false, turns: [] };
+    $('chat-api-log').click();
+    await settle();
+    expect(modal().textContent).toContain('No API log was kept for this chat. It started before API logs existed.');
+  });
+
+  it('shows the error when the log cannot be read', async () => {
+    const { server } = await boot();
+    server.apiLog = 'missing';
+    $('chat-api-log').click();
+    await settle();
+    expect(modal()).toBeNull();
+    expect(toastText()).toBe('Conversation not found.');
+  });
+
   it('has a New Chat button beside the connection badge that opens the same New conversation popup as File > New', async () => {
     await boot();
     const right = document.querySelector('.toolbar-right');
@@ -182,14 +240,14 @@ describe('chat page', () => {
     expect(document.querySelectorAll('.message')).toHaveLength(6);
     expect(document.querySelector('.badge').textContent).toBe('3 turns');
     expect($('conversation-name').textContent).toBe('Sample conversation');
-    expect(chips()).toEqual({ AGENT: 'General assistant', MODEL: 'model-a', REASONING: 'Default (model decides)', TEMPERATURE: '0', 'KB SUMMARY TOOL': 'Off' });
+    expect(chips()).toEqual({ AGENT: 'General assistant', MODEL: 'model-a', REASONING: 'Default (model decides)', TEMPERATURE: '0', 'KB SUMMARY TOOL': 'Off', 'BRIEF REPLIES': 'Off' });
     expect(document.querySelectorAll('.config-chips')).toHaveLength(0); // no chips any more: a bullet list
     expect(document.querySelectorAll('.side-settings-list')).toHaveLength(1);
     expect(document.querySelector('#conversation-sidebar .side-settings-list')).not.toBeNull(); // the settings sit in the sidebar
     const box = document.querySelector('details#side-settings');
     expect(box.open).toBe(false); // collapsed until the user opens it
     expect(box.querySelector('summary').textContent).toBe('Settings');
-    expect([...box.querySelectorAll('ul > li')]).toHaveLength(5); // a bullet list
+    expect([...box.querySelectorAll('ul > li')]).toHaveLength(6); // a bullet list
     expect(document.querySelector('.turn-list').closest('details')).toBeNull(); // the prompts are not inside it
     box.open = true;
     box.dispatchEvent(new Event('toggle'));
@@ -273,7 +331,7 @@ describe('chat page', () => {
 
   it('shows the conversation\'s own settings and sends only the text with each message', async () => {
     const { mock } = await boot({ config: { agent_id: 'research', model: 'model-b', reasoning_level: 'high', kb_summary_tool: true } });
-    expect(chips()).toEqual({ AGENT: 'IT Security Assistant', MODEL: 'model-b', REASONING: 'High', TEMPERATURE: '0', 'KB SUMMARY TOOL': 'On' });
+    expect(chips()).toEqual({ AGENT: 'IT Security Assistant', MODEL: 'model-b', REASONING: 'High', TEMPERATURE: '0', 'KB SUMMARY TOOL': 'On', 'BRIEF REPLIES': 'Off' });
     submit('hello');
     await settle();
     expect(mock.lastBody('POST /api/conversations/:id/messages')).toEqual({ content: 'hello', request_id: expect.stringMatching(ID) });
@@ -385,6 +443,11 @@ describe('chat page', () => {
     expect([...field('model').options].map((o) => o.value)).toEqual(['model-a', 'model-b', 'model-c']);
     expect([...field('reasoning').options].map((o) => o.value)).toEqual(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
     expect(field('kbsummary').checked).toBe(false); // off by default
+    expect(field('briefreplies').checked).toBe(false); // so is Brief replies
+    const kbRow = field('kbsummary').closest('.modal-check');
+    expect(kbRow.nextElementSibling).toBe(field('briefreplies').closest('.modal-check')); // to the right of the KB summary tool
+    expect(kbRow.parentElement.classList.contains('modal-grid')).toBe(true);
+    expect(modal().textContent).toContain('Respond in 100 words or less.');
     expect(field('temperature').value).toBe('0'); // 0 by default
     expect(mock.called('POST /api/conversations')).toBe(false); // nothing starts until the popup is submitted
     field('name').value = 'Segmentation, high';
@@ -393,14 +456,15 @@ describe('chat page', () => {
     field('reasoning').value = 'high';
     field('temperature').value = '0.7';
     field('kbsummary').checked = true;
+    field('briefreplies').checked = true;
     modal().querySelector('form').requestSubmit();
     await settle();
     expect(mock.lastBody('POST /api/conversations')).toEqual({
-      name: 'Segmentation, high', agent_id: 'research', model: 'model-b', reasoning_level: 'high', temperature: 0.7, kb_summary_tool: true,
+      name: 'Segmentation, high', agent_id: 'research', model: 'model-b', reasoning_level: 'high', temperature: 0.7, kb_summary_tool: true, brief_replies: true,
     }); // fmt: skip
     expect(modal()).toBeNull();
     expect($('conversation-name').textContent).toBe('Segmentation, high');
-    expect(chips()).toEqual({ AGENT: 'IT Security Assistant', MODEL: 'model-b', REASONING: 'High', TEMPERATURE: '0.7', 'KB SUMMARY TOOL': 'On' });
+    expect(chips()).toEqual({ AGENT: 'IT Security Assistant', MODEL: 'model-b', REASONING: 'High', TEMPERATURE: '0.7', 'KB SUMMARY TOOL': 'On', 'BRIEF REPLIES': 'Off' });
     expect(document.querySelector('.empty h2').textContent).toBe('Start with a prompt.');
     expect(mock.lastBody('PUT /api/preferences')).toEqual({ agent_id: 'research', model: 'model-b' }); // the next popup starts here
     submit('first message in the new chat');
@@ -638,7 +702,7 @@ describe('chat page', () => {
       expect(mock.called('POST /api/conversations/:id/open')).toBe(true);
       expect(modal()).toBeNull();
       expect($('conversation-name').textContent).toBe('Earlier chat');
-      expect(chips()).toEqual({ AGENT: 'IT Security Assistant', MODEL: 'model-b', REASONING: 'High', TEMPERATURE: '0', 'KB SUMMARY TOOL': 'On' });
+      expect(chips()).toEqual({ AGENT: 'IT Security Assistant', MODEL: 'model-b', REASONING: 'High', TEMPERATURE: '0', 'KB SUMMARY TOOL': 'On', 'BRIEF REPLIES': 'Off' });
       expect(document.querySelectorAll('.message')).toHaveLength(2);
       submit('continuing the earlier chat');
       await settle();

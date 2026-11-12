@@ -29,6 +29,7 @@ describe('replay api', () => {
       reasoningLevel: 'default',
       temperature: 0,
       logprobs: false,
+      briefReplies: false,
       contextSummary: null,
       sourceConversationId: null,
       results: {
@@ -42,7 +43,7 @@ describe('replay api', () => {
 
   it('maps saved replay summaries and details', () => {
     expect(toSummary(summary)).toEqual({
-      id: 'r1:a', runId: 'r1', slot: 'a', model: 'm1', agentId: 'assistant', completed: false, kbSummaryTool: false, reasoningLevel: 'default', temperature: 0, logprobs: false, sourceConversationId: null,
+      id: 'r1:a', runId: 'r1', slot: 'a', model: 'm1', agentId: 'assistant', completed: false, kbSummaryTool: false, reasoningLevel: 'default', temperature: 0, logprobs: false, briefReplies: false, sourceConversationId: null,
       promptCount: 2, responseCount: 1, createdAt: '2026-01-02T00:00:00Z',
     }); // fmt: skip
     const detail = toSavedDetail({ ...summary, prompts: ['p1', 'p2'], responses: run().results.a });

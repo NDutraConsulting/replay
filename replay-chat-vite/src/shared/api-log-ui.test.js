@@ -13,6 +13,20 @@ beforeEach(() => {
   document.body.innerHTML = '';
 });
 
+describe('apiLogHTML for a chat', () => {
+  it('speaks of the chat, not a replay', () => {
+    expect(apiLogHTML(log([], { recorded: false }), 'chat')).toContain('No API log was kept for this chat. It started before API logs existed.');
+    expect(apiLogHTML(log([turn(0, [])]), 'chat')).toContain('This chat ran in demo mode');
+    const html = apiLogHTML(log([turn(0, [call()])], { temperature: 0, reasoning_level: 'default', logprobs: false }), 'chat');
+    expect(html).toContain('Chat temperature');
+    expect(html).not.toContain('Replay temperature');
+  });
+
+  it('still says replay by default', () => {
+    expect(apiLogHTML(log([], { recorded: false }))).toContain('No API log was kept for this replay. It was saved before API logs existed.');
+  });
+});
+
 describe('purposeLabel', () => {
   it('names what each call was for', () => {
     expect(purposeLabel('answer')).toBe('Answer');

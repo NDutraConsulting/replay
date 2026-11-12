@@ -63,6 +63,49 @@ describe('replay templates', () => {
     expect(document.querySelectorAll('select[id^="model-"]')).toHaveLength(0); // the settings are in File > Config
     expect([...document.querySelectorAll('.result-tabs button')].map((b) => b.textContent)).toEqual(['A · m1', 'B · m2']);
   });
+  it('shows Reset with Diff API and Diff Chat beside it once every prompt was sent, and hides Step through, Play all and Config', () => {
+    const done = { ...view().replay, cursor: 2 }; // the helper run has two prompts
+    document.body.innerHTML = replayPageHTML(view({ replay: done }));
+    expect([...document.querySelectorAll('.replay-controls button')].map((b) => b.id)).toEqual(['reset-replay', 'diff-api-btn', 'diff-chat-btn']);
+    expect(document.getElementById('reset-replay').nextElementSibling.textContent).toBe('Diff API');
+    expect(document.getElementById('diff-chat-btn').textContent).toBe('Diff Chat');
+    document.body.innerHTML = replayPageHTML(view({ replay: { ...done, cursor: 1 } }));
+    expect(document.getElementById('reset-replay')).toBeNull();
+    document.body.innerHTML = replayPageHTML(view({ replay: { ...done, prompts: [], cursor: 0 } }));
+    expect(document.getElementById('reset-replay')).toBeNull(); // nothing to replay, so nothing to reset
+  });
+  it('lists only the model and config differences in a Model Diff collapsible under the summary', () => {
+    const a = { ...saved('a', 'm1', [{ content: 'x' }]), temperature: 0, reasoningLevel: 'high', kbSummaryTool: false, briefReplies: false, logprobs: false, agentId: 'assistant' };
+    const b = { ...saved('b', 'm2', [{ content: 'x' }]), temperature: 1, reasoningLevel: 'high', kbSummaryTool: true, briefReplies: false, logprobs: false, agentId: 'assistant' };
+    document.body.innerHTML = diffHTML(view({ savedReplays: [a, b], savedDetails: { a, b }, savedLogprobs: {}, diffA: 'a', diffB: 'b' }));
+    const box = document.querySelector('.diff-summary-panel details#model-diff');
+    expect(box.querySelector('summary').textContent).toContain('Model Diff');
+    expect(box.querySelector('summary .badge').textContent).toBe('3 differences');
+    expect(box.open).toBe(false); // collapsed until opened
+    const rows = [...box.querySelectorAll('tbody tr')].map((r) => [...r.children].map((c) => c.textContent));
+    expect(rows).toEqual([['Model', 'm1', 'm2'], ['KB summary tool', 'Off', 'On'], ['Temperature', '0', '1']]); // same reasoning, agent, brief replies, log probs: not listed
+    document.body.innerHTML = diffHTML(view({ savedReplays: [a, b], savedDetails: { a, b }, savedLogprobs: {}, diffA: 'a', diffB: 'b', modelDiffOpen: true }));
+    expect(document.querySelector('details#model-diff').open).toBe(true);
+  });
+  it('says so in the Model Diff when both replays used the same model and settings', () => {
+    const a = { ...saved('a', 'm1', [{ content: 'x' }]) };
+    const b = { ...saved('b', 'm1', [{ content: 'x' }]) };
+    document.body.innerHTML = diffHTML(view({ savedReplays: [a, b], savedDetails: { a, b }, savedLogprobs: {}, diffA: 'a', diffB: 'b' }));
+    expect(document.querySelector('#model-diff summary .badge').textContent).toBe('0 differences');
+    expect(document.querySelector('#model-diff table')).toBeNull();
+    expect(document.querySelector('#model-diff').textContent).toContain('No differences');
+  });
+  it('binds the Model Diff toggle', () => {
+    const a = saved('a', 'm1', [{ content: 'x' }]);
+    const b = saved('b', 'm2', [{ content: 'x' }]);
+    document.body.innerHTML = diffHTML(view({ savedReplays: [a, b], savedDetails: { a, b }, savedLogprobs: {}, diffA: 'a', diffB: 'b' }));
+    const seen = [];
+    bindDiff({ onSelect() {}, onView() {}, onDiffSettings() {}, onToggleSelectors() {}, onToggleModelDiff: (open) => seen.push(open) });
+    const box = document.getElementById('model-diff');
+    box.open = true;
+    box.dispatchEvent(new Event('toggle'));
+    expect(seen).toEqual([true]);
+  });
   it('shows the Model responses panel only after Step through was used', () => {
     document.body.innerHTML = replayPageHTML(view({ stepped: false }));
     expect(document.querySelector('.results')).toBeNull();
@@ -126,7 +169,7 @@ describe('replay templates', () => {
   it('puts the Config button in the controls row, just to the right of Play all, and not in the results header', () => {
     document.body.innerHTML = replayPageHTML(view());
     const row = document.querySelector('.replay-controls');
-    expect([...row.children].map((b) => b.id)).toEqual(['reset-replay', 'step-replay', 'play-replay', 'open-config']);
+    expect([...row.children].map((b) => b.id)).toEqual(['step-replay', 'play-replay', 'open-config']); // Reset only appears once every prompt was sent
     expect(document.getElementById('play-replay').nextElementSibling).toBe(document.getElementById('open-config'));
     expect(row.lastElementChild.id).toBe('open-config'); // the far right of the row
     expect(document.querySelector('.results-head #open-config')).toBeNull();
@@ -471,7 +514,7 @@ describe('replay templates', () => {
       });
       expect(document.querySelector('.api-diff-head').textContent).toContain('Replay A · m1 · Temperature 0 · Reasoning Default');
       expect(document.querySelector('.api-diff-head').textContent).toContain('Replay B · m2');
-      expect(document.querySelector('details')).toBeNull(); // nothing is collapsed
+      expect(document.querySelector('.api-diff details')).toBeNull(); // nothing in the API comparison is collapsed
       const turns = [...document.querySelectorAll('.api-diff-turn')];
       expect(turns.map((t) => t.querySelector('.eyebrow').textContent)).toEqual(['Prompt 01', 'Prompt 02']);
       expect(turns[0].querySelector('.small').textContent).toBe('A made 3 calls, B made 2');

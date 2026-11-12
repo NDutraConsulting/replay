@@ -9,6 +9,7 @@ from models.conversation import (
     SendMessageResponse,
     UpdateConversationRequest,
 )
+from models.replay_run import ApiLog
 from models.user import User
 from services import conversation_service as service
 
@@ -55,3 +56,7 @@ async def rewind(settings: Settings, user: User, conversation_id: str) -> Rewind
 
 async def stop(settings: Settings, user: User, conversation_id: str, request_id: str | None = None) -> StopResponse:
     return await service.stop(settings, user, conversation_id, request_id)
+
+
+async def get_api_log(settings: Settings, user: User, conversation_id: str) -> ApiLog:
+    return await service.get_api_log(settings, user, conversation_id)

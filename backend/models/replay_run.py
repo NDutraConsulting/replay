@@ -131,6 +131,7 @@ class ReplayRun(BaseModel):
     reasoning_level: ReasoningLevel = "default"
     temperature: float = 0.0
     logprobs: bool = False
+    brief_replies: bool = False
     context_summary: str | None = None
     source_conversation_id: str | None = None
     """The chat the run was started from (None for older runs and runs from explicit prompts or a chat record)."""
@@ -156,11 +157,13 @@ class CreateReplayRunRequest(BaseModel):
     kb_summary_tool: bool | None = None
     """One switch for the whole run (both slots). Default: the source conversation's, else off."""
     reasoning_level: ReasoningLevel | None = None
-    """Default: the source conversation's, else "default"."""
+    """Default: "none" (reasoning off), whatever the source conversation used."""
     temperature: float | None = Field(default=None, ge=0, le=2)
     """Default: the source conversation's, else 0."""
     logprobs: bool | None = None
     """Ask the model for log probabilities in the response. Default: off."""
+    brief_replies: bool | None = None
+    """Append "Respond in 100 words or less." to the end of each request. Default: the source conversation's, else off."""
 
 
 class UpdateReplayRunRequest(BaseModel):
@@ -171,6 +174,7 @@ class UpdateReplayRunRequest(BaseModel):
     reasoning_level: ReasoningLevel | None = None
     temperature: float | None = Field(default=None, ge=0, le=2)
     logprobs: bool | None = None
+    brief_replies: bool | None = None
 
 
 class StepRequest(BaseModel):
@@ -194,6 +198,7 @@ class ReplayRunView(BaseModel):
     reasoning_level: ReasoningLevel
     temperature: float
     logprobs: bool
+    brief_replies: bool
     context_summary: str | None
     source_conversation_id: str | None
     cursor: int
@@ -219,6 +224,7 @@ class SavedReplaySummary(BaseModel):
     reasoning_level: ReasoningLevel = "default"
     temperature: float = 0.0
     logprobs: bool = False
+    brief_replies: bool = False
     source_conversation_id: str | None = None
     """The chat this replay was started from: the Replay page groups a chat's saved replays as versions."""
     prompt_count: int

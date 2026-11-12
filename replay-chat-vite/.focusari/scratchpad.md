@@ -45,3 +45,38 @@ we need to use the left side slider button like the one used in the replay tab
 It should say Select Replays.
 
 ###
+
+Update the following with a new chat button that opens the new chat popup
+
+<div class="toolbar-right"><span class="badge"><span class="dot"></span>API connected</span>{+ New Chat button}</div>
+
+###
+
+Update this > On: "Respond in 100 words or less." is added to the end of each request sent to the model. Off: requests are sent as you wrote them.
+
+with
+On: "Respond in 100 words or less." is added to the end of each request sent to the model. Off: requests are sent as you wrote them. -Ron Swanson
+
+###
+
+are you storing the full message in the chat record DB?
+
+###
+
+This should display the settings as a bullet list with font size 10
+
+<div class="source-chat"><div class="field-label">Current chat · Physics</div><div class="config-chips" aria-label="Settings (read-only)"><span class="chip"><b>Agent</b>General assistant</span><span class="chip"><b>Model</b>OpenAI (server key) · gpt-5.5</span><span class="chip"><b>Reasoning</b>Default (model decides)</span><span class="chip"><b>Temperature</b>0</span><span class="chip"><b>KB summary tool</b>Off</span><span class="chip"><b>Brief replies</b>On</span></div><p class="small source-chat-note">A replay starts from these settings. The chat's own settings never change; change the replay's below before you start it.</p></div>
+
+##
+
+On the replay page
+The open a chat modal should have 2 steps in the modal.
+step 1 is selecting a chat. The open button should say select on this view.
+step 2 should display the config menu. The config menu should default to the selected chats settings when opening a chat record in replay. Then this config view should show the open button
+
+###
+
+on the replay page
+The reset button should only be displayed after all the user prompts have been sent and other buttons should be hidden so that the user only sees on option
+
+<div class="replay-controls"><button class="btn blue tooltip" id="reset-replay" data-tip="Start a new replay. Saved results remain available in Diff."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m11 5-8 7 8 7V5Zm10 0-8 7 8 7V5Z"></path></svg>Reset</button><button class="btn" id="step-replay"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 4 12 8-12 8V4ZM20 4v16"></path></svg>Step through</button><button class="btn yellow" id="play-replay"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 4 14 8-14 8V4Z"></path></svg>Play all</button><button class="btn" id="open-config"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"></path><circle cx="15" cy="7" r="2"></circle><circle cx="9" cy="17" r="2"></circle></svg>Config</button></div>

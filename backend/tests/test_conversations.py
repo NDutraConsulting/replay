@@ -487,6 +487,140 @@ def test_a_compacted_conversation_keeps_the_temperature(logged_in_client):
     assert compacted.status_code == 201 and compacted.json()["temperature"] == 1.2
 
 
+# ---- brief replies (append "Respond in 100 words or less." to each request; fixed with the conversation)
+BRIEF = "Respond in 100 words or less."
+
+
+def brief_chat(client, brief=True):
+    return client.post(
+        "/api/conversations",
+        json={"name": "B", "agent_id": "assistant", "model": "m1", "brief_replies": brief},
+    ).json()["conversation_id"]
+
+
+def test_brief_replies_default_to_off_and_are_fixed_with_the_conversation(logged_in_client):
+    connect(logged_in_client)
+    cid = new(logged_in_client, model="m1")
+    assert logged_in_client.get(f"/api/conversations/{cid}").json()["brief_replies"] is False
+    briefly = brief_chat(logged_in_client)
+    assert logged_in_client.get(f"/api/conversations/{briefly}").json()["brief_replies"] is True
+    fixed = logged_in_client.patch(f"/api/conversations/{briefly}", json={"brief_replies": False})
+    assert fixed.status_code == 409 and fixed.json()["error"]["code"] == "configuration_fixed"
+    listed = {c["conversation_id"]: c for c in logged_in_client.get("/api/conversations").json()}
+    assert listed[briefly]["brief_replies"] is True and listed[cid]["brief_replies"] is False
+
+
+def test_the_instruction_ends_every_user_message_sent_to_the_model_but_is_not_stored(logged_in_client, llm_stub):
+    connect(logged_in_client)
+    cid = brief_chat(logged_in_client)
+    send(logged_in_client, cid, "first")
+    send(logged_in_client, cid, "second")
+    users = [m["content"] for m in llm_stub.calls[-1]["messages"] if m["role"] == "user"]
+    assert users == [f"first\n\n{BRIEF}", f"second\n\n{BRIEF}"]  # every request carries it, history included
+    stored = [m["content"] for m in logged_in_client.get(f"/api/conversations/{cid}").json()["messages"]]
+    assert not any(BRIEF in text for text in stored)  # the transcript shows only what the user wrote
+
+
+def test_the_view_carries_the_exact_instruction_so_the_page_can_show_what_is_sent(logged_in_client):
+    connect(logged_in_client)
+    cid = brief_chat(logged_in_client)
+    assert logged_in_client.get(f"/api/conversations/{cid}").json()["brief_instruction"] == BRIEF
+
+
+def test_nothing_is_appended_when_the_switch_is_off(logged_in_client, llm_stub):
+    connect(logged_in_client)
+    cid = brief_chat(logged_in_client, brief=False)
+    send(logged_in_client, cid, "plain")
+    assert all(BRIEF not in m["content"] for m in llm_stub.calls[-1]["messages"])
+
+
+def test_a_compacted_conversation_keeps_brief_replies(logged_in_client):
+    connect(logged_in_client)
+    cid = brief_chat(logged_in_client)
+    send(logged_in_client, cid, "hello")
+    compacted = logged_in_client.post(f"/api/conversations/{cid}/compact")
+    assert compacted.status_code == 201 and compacted.json()["brief_replies"] is True
+
+
+# ---- the chat's API log (Log.db): exactly what was sent to the provider for each prompt
+def api_log(client, cid):
+    return client.get(f"/api/conversations/{cid}/api-log")
+
+
+def test_the_chat_api_log_needs_login(client):
+    assert client.get("/api/conversations/anything/api-log").status_code == 401
+
+
+def test_the_chat_api_log_belongs_to_the_owner(logged_in_client, other_client):
+    cid = new(logged_in_client)
+    assert api_log(logged_in_client, "missing").status_code == 404
+    assert api_log(other_client, cid).status_code == 404
+
+
+def test_the_chat_api_log_keeps_the_exact_request_for_each_prompt(logged_in_client, llm_stub):
+    connect(logged_in_client)
+    cid = brief_chat(logged_in_client)
+    send(logged_in_client, cid, "first")
+    send(logged_in_client, cid, "second")
+    log = api_log(logged_in_client, cid).json()
+    assert log["recorded"] is True and log["model"] == "m1"
+    assert [t["prompt"] for t in log["turns"]] == ["first", "second"]
+    answers = [c for t in log["turns"] for c in t["calls"] if c["purpose"] == "answer"]
+    assert len(answers) == 2
+    sent = [m["content"] for m in answers[-1]["request"]["body"]["messages"] if m["role"] == "user"]
+    assert sent == [f"first\n\n{BRIEF}", f"second\n\n{BRIEF}"]  # what went over the wire, appended text included
+    assert "sk-secret" not in str(log)  # the key is never kept
+
+
+def test_the_chat_api_log_is_not_kept_in_app_db(logged_in_client, llm_stub, test_settings):
+    import sqlite3
+
+    connect(logged_in_client)
+    cid = new(logged_in_client, model="m1")
+    send(logged_in_client, cid, "hello")
+    with sqlite3.connect(test_settings.DATABASE_PATH) as conn:
+        names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    assert "chat_api_calls" not in names
+    with sqlite3.connect(test_settings.LOG_DB_PATH) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM chat_api_calls").fetchone()[0] >= 1
+
+
+def test_a_failed_prompt_still_has_its_call_in_the_log(logged_in_client, llm_stub):
+    connect(logged_in_client)
+    cid = new(logged_in_client, model="m1")
+    llm_stub.error = RuntimeError("provider down")
+    try:
+        send(logged_in_client, cid, "boom")
+    except RuntimeError:
+        pass
+    log = api_log(logged_in_client, cid).json()
+    assert log["turns"] and log["turns"][0]["calls"]  # the request that failed is the one worth reading
+
+
+def test_demo_mode_is_recorded_with_no_calls_and_an_older_chat_is_not(logged_in_client):
+    cid = new(logged_in_client)  # no API connected: a demo reply, no REST call
+    send(logged_in_client, cid, "hello")
+    log = api_log(logged_in_client, cid).json()
+    assert log["recorded"] is True and log["turns"][0]["calls"] == []
+    older = new(logged_in_client)
+    assert api_log(logged_in_client, older).json()["recorded"] is False
+
+
+def test_rewinding_a_prompt_removes_its_calls_from_the_log(logged_in_client, llm_stub, test_settings):
+    connect(logged_in_client)
+    cid = new(logged_in_client, model="m1")
+    send(logged_in_client, cid, "keep")
+    send(logged_in_client, cid, "drop")
+    assert logged_in_client.post(f"/api/conversations/{cid}/rewind").status_code == 200
+    log = api_log(logged_in_client, cid).json()
+    assert [t["prompt"] for t in log["turns"]] == ["keep"]
+    import sqlite3
+
+    with sqlite3.connect(test_settings.LOG_DB_PATH) as conn:
+        left = conn.execute("SELECT COUNT(*) FROM chat_api_requests WHERE conversation_id = ?", (cid,)).fetchone()[0]
+    assert left == 1
+
+
 # ---- the most prompts a conversation may hold (MAX_USER_PROMPTS)
 def test_the_default_limit_is_ten_and_the_view_says_so(logged_in_client, test_settings):
     from config import Settings

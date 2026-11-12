@@ -11,6 +11,48 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def call_values(call: dict) -> tuple:
+    """A call as the column values (after the keys and user id) of the call tables: purpose, method, url, request headers,
+    request body, response status, response body, truncated, error, duration, time, settings, log probabilities."""
+    response = call.get("response")
+    return (
+        call["purpose"],
+        call["method"],
+        call["url"],
+        json.dumps(call["request"]["headers"]),
+        json.dumps(call["request"]["body"]),
+        response["status"] if response else None,
+        response["body"] if response else None,
+        int(bool(response and response.get("truncated"))),
+        call.get("error"),
+        int(call.get("duration_ms") or 0),
+        call["at"],
+        json.dumps(call["settings"]) if call.get("settings") is not None else None,
+        json.dumps(call["logprobs"]) if call.get("logprobs") else None,
+    )
+
+
+def call_from_row(r: sqlite3.Row) -> dict:
+    """A logged call, as the API log returns it (the same for a replay's calls and a chat's)."""
+    return {
+        "at": r["called_at"],
+        "purpose": r["purpose"],
+        "method": r["method"],
+        "url": r["url"],
+        "duration_ms": r["duration_ms"],
+        "request": {"headers": json.loads(r["request_headers_json"]), "body": json.loads(r["request_body_json"])},
+        "response": None
+        if r["response_status"] is None
+        else {
+            "status": r["response_status"],
+            "body": r["response_body"] or "",
+            "truncated": bool(r["response_truncated"]),
+        },
+        "error": r["error"],
+        "settings": json.loads(r["settings_json"]) if r["settings_json"] else None,
+    }
+
+
 async def record_turn(db_path: str, user_id: str, run_id: str, slot: str, turn_index: int, calls: list[dict]) -> None:
     """Keep one turn's calls, in order, in ONE transaction. The turn is marked as logged even when `calls` is empty
     (demo mode makes none). Logging the same turn again replaces what was kept."""
@@ -72,28 +114,7 @@ async def turns_for(db_path: str, user_id: str, run_id: str, slot: str) -> dict[
             (run_id, slot, user_id),
         ).fetchall()
         for r in rows:
-            turns.setdefault(r["turn_index"], []).append(
-                {
-                    "at": r["called_at"],
-                    "purpose": r["purpose"],
-                    "method": r["method"],
-                    "url": r["url"],
-                    "duration_ms": r["duration_ms"],
-                    "request": {
-                        "headers": json.loads(r["request_headers_json"]),
-                        "body": json.loads(r["request_body_json"]),
-                    },
-                    "response": None
-                    if r["response_status"] is None
-                    else {
-                        "status": r["response_status"],
-                        "body": r["response_body"] or "",
-                        "truncated": bool(r["response_truncated"]),
-                    },
-                    "error": r["error"],
-                    "settings": json.loads(r["settings_json"]) if r["settings_json"] else None,
-                }
-            )
+            turns.setdefault(r["turn_index"], []).append(call_from_row(r))
         return turns
 
     return await run_in_db(db_path, _run)

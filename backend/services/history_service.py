@@ -23,6 +23,9 @@ from typing import Literal
 from config import Settings
 from repositories import kb_repository, message_repository
 
+BRIEF_REPLY_INSTRUCTION = "Respond in 100 words or less."
+"""Appended to the end of each request when a conversation's (or replay's) Brief replies switch is on."""
+
 
 @dataclass
 class Attachment:
@@ -98,8 +101,12 @@ def _block(attachment: Attachment) -> str:
     return reference_block(*attachment.parts, attachment.text)
 
 
-def render(turns: list[Turn], summary: str | None = None, *, with_attachments: bool = True) -> list[dict]:
-    """The messages list for the model. `summary` (a compacted_summary) goes in front of the first user turn."""
+def render(
+    turns: list[Turn], summary: str | None = None, *, with_attachments: bool = True, brief: bool = False
+) -> list[dict]:
+    """The messages list for the model. `summary` (a compacted_summary) goes in front of the first user turn. With `brief`
+    the instruction to keep replies short is appended to the end of every user message (the history is sent again with
+    each request, so every earlier request is shown the same way it was sent)."""
     messages: list[dict] = []
     first_user_done = False
     for turn in turns:
@@ -112,6 +119,8 @@ def render(turns: list[Turn], summary: str | None = None, *, with_attachments: b
                 blocks += [_block(a) for a in turn.attachments]
             if blocks:
                 content = "".join(blocks) + "The user's message:\n" + turn.user
+            if brief:
+                content = f"{content}\n\n{BRIEF_REPLY_INSTRUCTION}"
             first_user_done = True
             messages.append({"role": "user", "content": content})
         if turn.assistant is not None:
@@ -180,11 +189,13 @@ async def conversation_turns(settings: Settings, conversation_id: str) -> tuple[
     return turns, summary
 
 
-async def for_conversation(settings: Settings, conversation_id: str, *, plain: bool = False) -> list[dict]:
+async def for_conversation(
+    settings: Settings, conversation_id: str, *, plain: bool = False, brief: bool = False
+) -> list[dict]:
     """The messages to send to the model. `plain` leaves out the files and the compacted summary (only what was said):
     that is what a demo reply and the routing prompts read."""
     turns, summary = await conversation_turns(settings, conversation_id)
-    return render(turns, None, with_attachments=False) if plain else render(turns, summary)
+    return render(turns, None, with_attachments=False) if plain else render(turns, summary, brief=brief)
 
 
 def text_of(messages: list[dict]) -> str:

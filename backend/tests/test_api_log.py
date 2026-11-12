@@ -31,11 +31,11 @@ def columns(path, table):
 def test_init_creates_log_db_with_its_own_migrations(tmp_path):
     app, kb, log = (str(tmp_path / n) for n in ("app.db", "kb.db", "Log.db"))
     init_db(app, kb, log)
-    assert {"api_calls", "api_log_turns", "schema_migrations"} <= tables(log)
+    assert {"api_calls", "api_log_turns", "chat_api_calls", "chat_api_requests", "schema_migrations"} <= tables(log)
     assert "api_calls" not in tables(app) and "api_calls" not in tables(kb)  # not in the other files
     assert init_db(app, kb, log) == []  # a second start applies nothing new
     with sqlite3.connect(log) as conn:
-        assert [r[0] for r in conn.execute("SELECT version FROM schema_migrations")] == [1, 2, 3]
+        assert [r[0] for r in conn.execute("SELECT version FROM schema_migrations")] == [1, 2, 3, 4]
 
 
 def test_the_log_is_not_stored_in_app_db(db, test_settings):
@@ -175,7 +175,7 @@ def test_the_api_log_names_the_replays_temperature_and_reasoning_and_each_calls_
         json={"name": "S", "agent_id": "assistant", "model": "m1", "temperature": 0.6, "reasoning_level": "high"},
     ).json()["conversation_id"]
     logged_in_client.post(f"/api/conversations/{cid}/messages", json={"content": "hello"})
-    run = run_of(create(logged_in_client, conversation_id=cid))
+    run = run_of(create(logged_in_client, conversation_id=cid, reasoning_level="high"))
     play_all(logged_in_client, run)
     body = logged_in_client.get(f"/api/saved-replays/{run['replay_run_id']}:a/api-log").json()
     assert body["temperature"] == 0.6 and body["reasoning_level"] == "high"

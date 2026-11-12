@@ -23,6 +23,8 @@ export const conversationFields = (c) => ({
   reasoningLevel: c.reasoning_level,
   temperature: c.temperature ?? 0,
   kbSummaryTool: c.kb_summary_tool,
+  briefInstruction: c.brief_instruction ?? '', // the exact text the server adds to the end of each request
+  briefReplies: c.brief_replies ?? false, // "Respond in 100 words or less." is added to the end of each request
   sourceConversationId: c.source_conversation_id,
   maxUserPrompts: c.max_user_prompts ?? null, // the most prompts a conversation may hold (null: the server sent no limit)
   messages: c.messages,
@@ -64,9 +66,9 @@ export const rewindConversation = (conversationId) => api.post(`/api/conversatio
 
 /**
  * Start a conversation with its fixed settings (the New conversation popup).
- * @param {{name: string, agentId: string, model: string, reasoningLevel: string, temperature: number, kbSummaryTool: boolean}} settings
+ * @param {{name: string, agentId: string, model: string, reasoningLevel: string, temperature: number, kbSummaryTool: boolean, briefReplies: boolean}} settings
  */
-export const createConversation = ({ name, agentId, model, reasoningLevel, temperature, kbSummaryTool }) =>
+export const createConversation = ({ name, agentId, model, reasoningLevel, temperature, kbSummaryTool, briefReplies }) =>
   api.post('/api/conversations', {
     name,
     agent_id: agentId,
@@ -74,7 +76,11 @@ export const createConversation = ({ name, agentId, model, reasoningLevel, tempe
     reasoning_level: reasoningLevel,
     temperature,
     kb_summary_tool: kbSummaryTool,
+    brief_replies: briefReplies ?? false,
   });
+
+/** The raw REST calls the Chat page sent to the provider for this conversation, prompt by prompt (read from Log.db). */
+export const getChatApiLog = (conversationId) => api.get(`/api/conversations/${encodeURIComponent(conversationId)}/api-log`);
 
 /** The name is only a label: it can repeat and it can change. */
 export const renameConversation = (conversationId, name) => api.patch(`/api/conversations/${conversationId}`, { name });

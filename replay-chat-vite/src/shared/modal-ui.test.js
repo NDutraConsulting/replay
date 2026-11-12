@@ -49,6 +49,14 @@ describe('modals', () => {
     expect(onSubmit).toHaveBeenCalledTimes(2);
   });
 
+  it('stays open, with no message, when onSubmit returns false (the popup moved to another step)', async () => {
+    const handle = showModal({ title: 't', bodyHTML: '<input name="x">', onSubmit: async () => false });
+    handle.form.requestSubmit();
+    await settle();
+    expect(overlay()).not.toBeNull();
+    expect(overlay().querySelector('.modal-error').textContent).toBe('');
+  });
+
   it('only one popup is open at a time, and Tab stays inside it', () => {
     showModal({ title: 'first', bodyHTML: '' });
     showModal({ title: 'second', bodyHTML: '<input id="a"><input id="b">' });

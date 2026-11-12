@@ -5,9 +5,11 @@ import { newRequestId } from '../../shared/http.js';
 import { startPage } from '../../shared/shell-ui.js';
 import { mountChatFileMenu } from './chat-file-menu.js';
 import { toast, toastError } from '../../shared/toast.js';
+import { openApiLogModal } from '../../shared/api-log-ui.js';
+import { modelLabel } from '../../shared/model-label.js';
 import {
   chatState, compactConversation, conversationFields, createConversation, loadConversation, renameConversation,
-  listConversations, openConversation, rewindConversation, savePreferences, sendMessage, stopMessage,
+  getChatApiLog, listConversations, openConversation, rewindConversation, savePreferences, sendMessage, stopMessage,
 } from './chat-api.js';
 import {
   answered, applyConversationHidden, bindChat, chatHTML, focusPrompt, openChatPicker, openNewConversationModal, openRenameModal,
@@ -56,6 +58,16 @@ export const initChat = () =>
     const remember = (changes) => savePreferences(changes).catch(toastError);
 
     const handlers = {
+      /** What was actually sent to the provider for each prompt of this chat (Log.db), in a popup of collapsible calls. */
+      async onApiLog() {
+        let log;
+        try {
+          log = await getChatApiLog(state.conversationId);
+        } catch (err) {
+          return toastError(err);
+        }
+        return openApiLogModal(log, `API log · ${state.name} · ${modelLabel(log.model)}`, 'chat');
+      },
       onToggleSettings(open) {
         state.settingsOpen = open; // no redraw: the box has already opened or closed; it stays as left when the page redraws
       },
@@ -69,7 +81,7 @@ export const initChat = () =>
         if (state.busy) return;
         openNewConversationModal(
           state,
-          { name: '', agentId: state.defaultAgentId, model: state.defaultModel, reasoningLevel: 'default', temperature: 0, kbSummaryTool: false },
+          { name: '', agentId: state.defaultAgentId, model: state.defaultModel, reasoningLevel: 'default', temperature: 0, kbSummaryTool: false, briefReplies: false },
           async (values) => {
             try {
               adopt(await createConversation(values));

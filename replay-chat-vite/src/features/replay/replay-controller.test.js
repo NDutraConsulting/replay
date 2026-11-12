@@ -39,7 +39,7 @@ function replayServer({
   const current = () => server.runs.at(-1);
   const view = (r) => ({
     replay_run_id: r.id, agent_id: r.agent_id, prompts: r.prompts, model_a: r.model_a, model_b: r.model_b, cursor: r.cursor,
-    kb_summary_tool: r.kb_summary_tool ?? false, reasoning_level: r.reasoning_level ?? 'default', temperature: r.temperature ?? 0, logprobs: r.logprobs ?? false, context_summary: r.context_summary ?? null, source_conversation_id: r.source_conversation_id ?? null,
+    kb_summary_tool: r.kb_summary_tool ?? false, reasoning_level: r.reasoning_level ?? 'default', temperature: r.temperature ?? 0, logprobs: r.logprobs ?? false, brief_replies: r.brief_replies ?? false, context_summary: r.context_summary ?? null, source_conversation_id: r.source_conversation_id ?? null,
     step_running: server.running, saved_at: r.saved_at, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
     results: structuredClone(r.results),
   }); // fmt: skip
@@ -48,7 +48,7 @@ function replayServer({
       ['a', 'b'].filter((slot) => r.results[slot].length).map((slot) => ({
         id: `${r.id}:${slot}`, replay_run_id: r.id, slot, model: slot === 'a' ? r.model_a : r.model_b, agent_id: r.agent_id,
         completed: r.cursor === r.prompts.length, prompt_count: r.prompts.length, response_count: r.results[slot].length, created_at: r.saved_at,
-        kb_summary_tool: r.kb_summary_tool ?? false, reasoning_level: r.reasoning_level ?? 'default', temperature: r.temperature ?? 0, logprobs: r.logprobs ?? false, source_conversation_id: r.source_conversation_id ?? null,
+        kb_summary_tool: r.kb_summary_tool ?? false, reasoning_level: r.reasoning_level ?? 'default', temperature: r.temperature ?? 0, logprobs: r.logprobs ?? false, brief_replies: r.brief_replies ?? false, source_conversation_id: r.source_conversation_id ?? null,
       })),
     ); // fmt: skip
   const newRun = (body) => {
@@ -58,7 +58,7 @@ function replayServer({
     const list = body.prompts ?? (other ? other.messages.filter((m) => m.role === 'user').map((m) => m.content) : server.prompts);
     const fromChat = !body.prompts; // a run from a conversation starts from its settings
     const source = body.conversation_id ?? body.source_conversation_id ?? (fromChat ? 'c1' : null);
-    const r = { id: `run${n++}`, source_conversation_id: source, kb_summary_tool: body.kb_summary_tool ?? (fromChat ? server.chat.kb_summary_tool : false), reasoning_level: body.reasoning_level ?? (fromChat ? server.chat.reasoning_level : 'default'), temperature: body.temperature ?? (fromChat ? server.chat.temperature ?? 0 : 0), logprobs: body.logprobs ?? false, agent_id: body.agent_id ?? (fromChat ? server.chat.agent_id : app.preferences.agent_id), prompts: list, model_a: body.model_a ?? app.settings.models[0], model_b: body.model_b ?? app.settings.models[1], cursor: 0, saved_at: null, results: { a: [], b: [] } }; // fmt: skip
+    const r = { id: `run${n++}`, source_conversation_id: source, kb_summary_tool: body.kb_summary_tool ?? (fromChat ? server.chat.kb_summary_tool : false), reasoning_level: body.reasoning_level ?? 'none', temperature: body.temperature ?? (fromChat ? server.chat.temperature ?? 0 : 0), logprobs: body.logprobs ?? false, agent_id: body.agent_id ?? (fromChat ? server.chat.agent_id : app.preferences.agent_id), prompts: list, model_a: body.model_a ?? app.settings.models[0], model_b: body.model_b ?? app.settings.models[1], cursor: 0, saved_at: null, results: { a: [], b: [] } }; // fmt: skip
     server.runs.push(r);
     return r;
   };
@@ -166,6 +166,12 @@ const existingRun = (extra = {}) => ({
   id: 'run0', agent_id: 'assistant', prompts: ['first prompt', 'second prompt', 'third prompt'], model_a: 'model-a', model_b: 'model-b',
   cursor: 0, saved_at: null, source_conversation_id: 'c1', results: { a: [], b: [] }, ...extra,
 }); // fmt: skip
+
+/** A run whose prompts have all been sent: the only state in which the Reset button is shown. */
+const finishedRun = (extra = {}) => {
+  const answers = (slot, model) => ['first prompt', 'second prompt', 'third prompt'].map((_, i) => ({ content: `${slot.toUpperCase()}${i}`, model, demo: true, error: false }));
+  return existingRun({ cursor: 3, saved_at: '2026-03-01T00:00:00Z', results: { a: answers('a', 'model-a'), b: answers('b', 'model-b') }, ...extra });
+};
 
 /** Load the page. The intro popup it opens with is dismissed so each test starts clean (`keepIntro: true` leaves it). */
 async function boot({ keepIntro = false, ...options } = {}) {
@@ -359,8 +365,10 @@ describe('replay page', () => {
       openConfig();
       const note = document.querySelector('.source-chat');
       expect(text(note)).toContain('Design chat');
-      const chips = Object.fromEntries([...note.querySelectorAll('.chip')].map((c) => [c.querySelector('b').textContent.toUpperCase(), c.childNodes[1].textContent]));
-      expect(chips).toEqual({ AGENT: 'Code assistant', MODEL: 'model-b', REASONING: 'Low', TEMPERATURE: '0', 'KB SUMMARY TOOL': 'On' });
+      const chips = Object.fromEntries([...note.querySelectorAll('.config-list li')].map((c) => [c.querySelector('b').textContent.toUpperCase(), c.childNodes[1].textContent]));
+      expect(chips).toEqual({ AGENT: 'Code assistant', MODEL: 'model-b', REASONING: 'Low', TEMPERATURE: '0', 'KB SUMMARY TOOL': 'On', 'BRIEF REPLIES': 'Off' });
+      expect(note.querySelector('ul.config-list')).not.toBeNull(); // a bullet list, not chips
+      expect(note.querySelectorAll('.chip')).toHaveLength(0);
       expect(note.querySelector('select, input')).toBeNull(); // nothing to change here
     });
 
@@ -369,7 +377,8 @@ describe('replay page', () => {
       expect(mock.lastBody('POST /api/replay-runs')).toEqual({});
       openConfig();
       expect($('replay-kb-summary').checked).toBe(true);
-      expect($('replay-reasoning').value).toBe('low');
+      expect($('replay-reasoning').value).toBe('none'); // reasoning starts off on a replay, whatever the chat used
+      expect(text(document.querySelector('.source-chat'))).toContain('Low'); // the chat's own level is still shown
       expect($('replay-agent').value).toBe('code');
     });
 
@@ -397,7 +406,7 @@ describe('replay page', () => {
     });
 
     it('can still be changed once the replay has started (that resets it), and Reset keeps them', async () => {
-      const { mock } = await boot({ run: startedRun({ kb_summary_tool: true, reasoning_level: 'medium' }) });
+      const { mock } = await boot({ run: finishedRun({ kb_summary_tool: true, reasoning_level: 'medium' }) });
       openConfig();
       expect($('replay-kb-summary').disabled).toBe(false);
       expect($('replay-reasoning').disabled).toBe(false);
@@ -429,8 +438,8 @@ describe('replay page', () => {
       await openTab('diff');
       const badges = [...document.querySelectorAll('.diff-settings .badge')].map(text);
       expect(badges).toEqual([
-        'A · Model model-a', 'A · KB summary tool on', 'A · Reasoning High', 'A · Temperature 0', 'A · Log probabilities off',
-        'B · Model model-b', 'B · KB summary tool on', 'B · Reasoning High', 'B · Temperature 0', 'B · Log probabilities off',
+        'A · Model model-a', 'A · KB summary tool on', 'A · Brief replies off', 'A · Reasoning High', 'A · Temperature 0', 'A · Log probabilities off',
+        'B · Model model-b', 'B · KB summary tool on', 'B · Brief replies off', 'B · Reasoning High', 'B · Temperature 0', 'B · Log probabilities off',
       ]);
       // only what differs between A and B is highlighted: here the models
       expect([...document.querySelectorAll('.diff-settings .badge.diff-changed')].map(text)).toEqual(['A · Model model-a', 'B · Model model-b']);
@@ -541,28 +550,53 @@ describe('replay page', () => {
     const started = () => existingRun({ cursor: 1, results: { a: [{ content: 'A0', model: 'model-a', demo: true, error: false }], b: [{ content: 'B0', model: 'model-b', demo: true, error: false }] } });
 
     it('reset starts a new run with the same prompts, models and agent', async () => {
-      const { mock } = await boot({ run: started() });
+      const { mock } = await boot({ run: finishedRun() });
       await click('reset-replay');
-      expect(mock.lastBody('POST /api/replay-runs')).toEqual({ prompts: ['first prompt', 'second prompt', 'third prompt'], model_a: 'model-a', model_b: 'model-b', agent_id: 'assistant', kb_summary_tool: false, reasoning_level: 'default', temperature: 0, logprobs: false, source_conversation_id: 'c1' }); // stays tied to its chat
+      expect(mock.lastBody('POST /api/replay-runs')).toEqual({ prompts: ['first prompt', 'second prompt', 'third prompt'], model_a: 'model-a', model_b: 'model-b', agent_id: 'assistant', kb_summary_tool: false, reasoning_level: 'default', temperature: 0, logprobs: false, brief_replies: false, source_conversation_id: 'c1' }); // stays tied to its chat
       expect(progress()).toContain('0 / 3 prompts');
       openConfig();
       expect($('model-a').disabled).toBe(false);
     });
 
     it('reset keeps the old run as a saved replay', async () => {
-      await boot({ run: started() });
+      await boot({ run: finishedRun() });
       await click('reset-replay');
       await openTab('history');
       expect(document.body.textContent).toContain('1 version');
     });
 
-    it('keeps a partial run as a saved replay when it is reset', async () => {
-      const { mock } = await boot({ run: started() });
+    it('shows only Reset, Diff API and Diff Chat once every prompt has been sent, and only Step through, Play all and Config before that', async () => {
+      await boot({ run: started() });
+      const ids = () => [...document.querySelectorAll('.replay-controls button')].map((b) => b.id);
+      expect(ids()).toEqual(['step-replay', 'play-replay', 'open-config']); // no Reset part way through
+      await boot({ run: finishedRun() });
+      expect(ids()).toEqual(['reset-replay', 'diff-api-btn', 'diff-chat-btn']); // Reset with the two Diff buttons beside it, nothing else
+      await boot({ run: existingRun() });
+      expect(ids()).toEqual(['step-replay', 'play-replay', 'open-config']);
+    });
+
+    it('swaps to Reset when the last prompt is stepped, and back to the others after Reset', async () => {
+      await boot({ run: finishedRun({ cursor: 2, saved_at: null, results: { a: finishedRun().results.a.slice(0, 2), b: finishedRun().results.b.slice(0, 2) } }) });
+      expect($('reset-replay')).toBeNull();
+      await click('step-replay');
+      expect($('reset-replay')).not.toBeNull();
+      expect($('step-replay')).toBeNull();
+      expect($('play-replay')).toBeNull();
+      expect($('open-config')).toBeNull();
       await click('reset-replay');
-      expect(mock.called('POST /api/replay-runs/:id/save')).toBe(false); // there is no Save button any more
-      await openTab('history');
-      expect(document.body.textContent).toContain('1 version');
-      expect(document.body.textContent).toContain('Partial replay');
+      expect($('reset-replay')).toBeNull();
+      expect($('step-replay')).not.toBeNull();
+    });
+
+    it('Diff API and Diff Chat beside Reset open the Diff tab on the API logs or the chat view', async () => {
+      await boot({ run: finishedRun() });
+      await click('diff-api-btn');
+      expect($('tab-diff').getAttribute('aria-selected')).toBe('true');
+      expect($('diff-view-api').getAttribute('aria-selected')).toBe('true');
+      await openTab('replay');
+      await click('diff-chat-btn');
+      expect($('tab-diff').getAttribute('aria-selected')).toBe('true');
+      expect($('diff-view-chat').getAttribute('aria-selected')).toBe('true');
     });
   });
 
@@ -628,7 +662,7 @@ describe('replay page', () => {
       expect(posts(mock)).toHaveLength(1);
       expect(mock.lastBody('POST /api/replay-runs')).toEqual({
         prompts: ['first prompt', 'second prompt', 'third prompt'], model_a: 'model-a', model_b: 'model-b', agent_id: 'research',
-        kb_summary_tool: false, reasoning_level: 'default', temperature: 0, logprobs: false, source_conversation_id: 'c1',
+        kb_summary_tool: false, reasoning_level: 'default', temperature: 0, logprobs: false, brief_replies: false, source_conversation_id: 'c1',
       }); // fmt: skip
       expect(mock.called('PATCH /api/replay-runs/:id')).toBe(false); // not an update of the started run
       expect(progress()).toContain('0 / 3 prompts');
@@ -644,13 +678,14 @@ describe('replay page', () => {
       ['replay-temperature', '0', { temperature: 0 }],
       ['replay-kb-summary', true, { kb_summary_tool: true }],
       ['replay-logprobs', true, { logprobs: true }],
+      ['replay-brief', true, { brief_replies: true }],
       ['model-a', 'model-c', { model_a: 'model-c' }],
       ['model-b', 'model-a', { model_b: 'model-a' }],
     ])('changing %s to %s after the run resets it with that change only', async (id, value, expected) => {
       const { mock } = await boot({ run: started({ temperature: 0.5 }) });
       openConfig();
       await change(id, value);
-      const base = { prompts: ['first prompt', 'second prompt', 'third prompt'], model_a: 'model-a', model_b: 'model-b', agent_id: 'assistant', kb_summary_tool: false, reasoning_level: 'default', temperature: 0.5, logprobs: false, source_conversation_id: 'c1' }; // fmt: skip
+      const base = { prompts: ['first prompt', 'second prompt', 'third prompt'], model_a: 'model-a', model_b: 'model-b', agent_id: 'assistant', kb_summary_tool: false, reasoning_level: 'default', temperature: 0.5, logprobs: false, brief_replies: false, source_conversation_id: 'c1' }; // fmt: skip
       expect(mock.lastBody('POST /api/replay-runs')).toEqual({ ...base, ...expected });
       expect(progress()).toContain('0 / 3 prompts');
     });
@@ -746,6 +781,22 @@ describe('replay page', () => {
       expect(text(document.querySelector('label[for="replay-logprobs"]'))).toContain('Log probabilities');
     });
 
+    it('has a Brief replies switch in Config that sends brief_replies, on and off', async () => {
+      const { mock } = await boot({ run: existingRun() });
+      openConfig();
+      expect($('replay-brief').checked).toBe(false);
+      expect(text(document.querySelector('label[for="replay-brief"]'))).toContain('Brief replies');
+      $('replay-brief').checked = true;
+      $('replay-brief').dispatchEvent(new Event('change'));
+      await settle();
+      expect(mock.lastBody('PATCH /api/replay-runs/:id')).toEqual({ brief_replies: true });
+      expect($('replay-brief').checked).toBe(true);
+      $('replay-brief').checked = false;
+      $('replay-brief').dispatchEvent(new Event('change'));
+      await settle();
+      expect(mock.lastBody('PATCH /api/replay-runs/:id')).toEqual({ brief_replies: false });
+    });
+
     it('sends the switch to the server, on and off, and shows it as set', async () => {
       const { mock } = await boot({ run: existingRun() });
       openConfig();
@@ -772,7 +823,7 @@ describe('replay page', () => {
     });
 
     it('is kept by Reset', async () => {
-      const { mock } = await boot({ run: { ...started(), logprobs: true } });
+      const { mock } = await boot({ run: finishedRun({ logprobs: true }) });
       await click('reset-replay');
       expect(mock.lastBody('POST /api/replay-runs').logprobs).toBe(true);
     });
@@ -941,7 +992,7 @@ describe('replay page', () => {
     });
 
     it('stays editable once the replay has started, and Reset keeps it', async () => {
-      const { mock } = await boot({ run: started() });
+      const { mock } = await boot({ run: finishedRun() });
       openConfig();
       expect($('replay-temperature').disabled).toBe(false);
       await click('reset-replay');
@@ -1165,7 +1216,9 @@ describe('replay page', () => {
       $('file-open').click();
       await settle();
       document.querySelector(`.modal input[value="${id}"]`).click();
-      document.querySelector('.modal button[type="submit"]').click();
+      document.querySelector('.modal button[type="submit"]').click(); // step 1: Select
+      await settle();
+      document.querySelector('.modal button[type="submit"]').click(); // step 2: Open, with the chat's settings
       await settle();
     };
     const pickerLabels = (side = 'diff-a') => [...$(side).options].map((o) => o.textContent.split(' · ').slice(0, 2).join(' '));
@@ -1326,8 +1379,8 @@ describe('replay page', () => {
       await settle();
       await openTab('history');
       await openTab('replay');
-      await click('reset-replay');
-      expect(document.querySelector('.replay-intro-modal')).toBeNull(); // changing tabs or resetting does not bring it back
+      await click('step-replay');
+      expect(document.querySelector('.replay-intro-modal')).toBeNull(); // changing tabs or stepping does not bring it back
       await boot({ run: existingRun(), keepIntro: true });
       expect(document.querySelector('.replay-intro-modal')).not.toBeNull(); // a new visit does
     });
@@ -1385,7 +1438,9 @@ describe('replay page', () => {
     const modalEl = () => document.querySelector('.modal');
     const chooseChat = async (id) => {
       modalEl().querySelector(`input[value="${id}"]`).click();
-      modalEl().querySelector('button[type="submit"]').click();
+      modalEl().querySelector('button[type="submit"]').click(); // step 1: Select
+      await settle();
+      modalEl().querySelector('button[type="submit"]').click(); // step 2: Open, with the chat's settings
       await settle();
     };
 
@@ -1406,7 +1461,10 @@ describe('replay page', () => {
       await chooseChat('c9');
       expect(modalEl()).toBeNull();
       expect(mock.called('POST /api/conversations/:id/open')).toBe(true);
-      expect(mock.lastBody('POST /api/replay-runs')).toEqual({ conversation_id: 'c9', model_a: 'model-a', model_b: 'model-b' });
+      expect(mock.lastBody('POST /api/replay-runs')).toEqual({
+        conversation_id: 'c9', agent_id: 'research', reasoning_level: 'high', kb_summary_tool: true, brief_replies: false, logprobs: false,
+        temperature: 0, model_a: 'model-b', model_b: 'model-b', // the chat's own settings, taken from step 2
+      }); // fmt: skip
       expect($('tab-history').getAttribute('aria-selected')).toBe('true'); // the history of the opened chat is on screen
       await openTab('replay');
       expect([...document.querySelectorAll('.prompt-row p')].map(text)).toEqual(['older one', 'older two']);
@@ -1421,8 +1479,13 @@ describe('replay page', () => {
       expect(modalEl().querySelector('input[name="chat"]:checked').value).toBe('c1');
       modalEl().querySelector('button[type="submit"]').click();
       await settle();
+      modalEl().querySelector('button[type="submit"]').click();
+      await settle();
       expect(modalEl()).toBeNull();
-      expect(mock.lastBody('POST /api/replay-runs')).toEqual({ conversation_id: 'c1', model_a: 'model-a', model_b: 'model-b' });
+      expect(mock.lastBody('POST /api/replay-runs')).toEqual({
+        conversation_id: 'c1', agent_id: 'assistant', reasoning_level: 'default', kb_summary_tool: false, brief_replies: false, logprobs: false,
+        temperature: 0, model_a: 'model-a', model_b: 'model-b',
+      }); // fmt: skip
       expect($('tab-history').getAttribute('aria-selected')).toBe('true');
     });
 
@@ -1454,8 +1517,102 @@ describe('replay page', () => {
       server.otherChats = [];
       await chooseChat('c9');
       expect(modalEl().querySelector('.modal-error').textContent).toBe('Conversation not found.');
-      await openTab('history');
-      expect(document.body.textContent).toContain('Sample conversation');
+      expect(modalEl().querySelector('#replay-agent')).not.toBeNull(); // still on step 2, so the user can go back or retry
+    });
+
+    describe('the two steps of File > Open', () => {
+      const step1 = async (id = 'c9') => {
+        modalEl().querySelector(`input[value="${id}"]`).click();
+        modalEl().querySelector('button[type="submit"]').click();
+        await settle();
+      };
+
+      it('step 1 chooses a chat and its button says Select; nothing is opened yet', async () => {
+        const { mock } = await boot({ run: existingRun(), otherChats: [earlier()] });
+        await openChat();
+        expect(text(modalEl().querySelector('.modal-step'))).toBe('Step 1 of 2');
+        expect(text(modalEl().querySelector('button[type="submit"]'))).toBe('Select');
+        expect(modalEl().querySelector('#replay-agent')).toBeNull();
+        modalEl().querySelector('button[type="submit"]').click(); // nothing picked: c1 is already checked, so this goes on
+        await settle();
+        expect(text(modalEl().querySelector('.modal-step'))).toBe('Step 2 of 2');
+        expect(mock.called('POST /api/conversations/:id/open')).toBe(false);
+      });
+
+      it("step 2 is the Config view, filled from the selected chat's settings, and its button says Open", async () => {
+        const { mock } = await boot({ run: existingRun(), otherChats: [earlier()] });
+        await openChat();
+        await step1('c9');
+        expect(text(modalEl().querySelector('.modal-step'))).toBe('Step 2 of 2');
+        expect(text(modalEl().querySelector('button[type="submit"]'))).toBe('Open');
+        expect(modalEl().querySelector('#chat-list, input[name="chat"]')).toBeNull(); // the list has gone
+        expect(modalEl().querySelector('#replay-agent').value).toBe('research');
+        expect(modalEl().querySelector('#replay-reasoning').value).toBe('high');
+        expect(modalEl().querySelector('#replay-kb-summary').checked).toBe(true);
+        expect(modalEl().querySelector('#replay-temperature').value).toBe('0');
+        expect(modalEl().querySelector('#model-a').value).toBe('model-b'); // the chat's model
+        expect(text(modalEl().querySelector('.source-chat'))).toContain('Earlier chat');
+        expect(modalEl().querySelector('#open-config-step')).not.toBeNull();
+        expect(modalEl().querySelector('#replay-config')).toBeNull(); // not the live Config popup's id
+        expect(mock.called('POST /api/replay-runs')).toBe(false); // nothing starts until Open
+      });
+
+      it("marks the chat's own settings in green, and only while a control still has the chat's value", async () => {
+        await boot({ run: existingRun(), otherChats: [earlier()] });
+        await openChat();
+        await step1('c9');
+        const badges = [...modalEl().querySelectorAll('.chat-value')].map(text);
+        expect(badges).toEqual(['Source Chat: IT Security Assistant', 'Source Chat: High', 'Source Chat: 0', 'Source Chat: On', 'Source Chat: Off', 'Source Chat: model-b']);
+        const marked = () => [...modalEl().querySelectorAll('.matches-chat')].map((e) => e.id);
+        expect(marked()).toEqual(['replay-agent', 'replay-reasoning', 'replay-temperature', 'replay-kb-summary', 'replay-brief', 'model-a']);
+        modalEl().querySelector('#replay-reasoning').value = 'low';
+        modalEl().querySelector('#replay-reasoning').dispatchEvent(new Event('change'));
+        modalEl().querySelector('#replay-brief').checked = true;
+        modalEl().querySelector('#replay-brief').dispatchEvent(new Event('change'));
+        expect(marked()).not.toContain('replay-reasoning');
+        expect(marked()).not.toContain('replay-brief');
+        modalEl().querySelector('#replay-reasoning').value = 'high';
+        modalEl().querySelector('#replay-reasoning').dispatchEvent(new Event('change'));
+        expect(marked()).toContain('replay-reasoning'); // back to the chat's value: green again
+        expect(modalEl().querySelector('#replay-logprobs').classList.contains('matches-chat')).toBe(false); // a chat has no such setting
+      });
+
+      it('Open starts the replay with whatever step 2 was changed to', async () => {
+        const { mock } = await boot({ run: existingRun(), otherChats: [earlier()] });
+        await openChat();
+        await step1('c9');
+        const set = (id, value) => {
+          modalEl().querySelector(id).value = value;
+        };
+        set('#replay-reasoning', 'low');
+        set('#replay-temperature', '0.8');
+        modalEl().querySelector('#replay-brief').checked = true;
+        modalEl().querySelector('#replay-logprobs').checked = true;
+        set('#model-b', 'model-c');
+        modalEl().querySelector('button[type="submit"]').click();
+        await settle();
+        expect(modalEl()).toBeNull();
+        expect(mock.lastBody('POST /api/replay-runs')).toEqual({
+          conversation_id: 'c9', agent_id: 'research', reasoning_level: 'low', kb_summary_tool: true, brief_replies: true, logprobs: true,
+          temperature: 0.8, model_a: 'model-b', model_b: 'model-c',
+        }); // fmt: skip
+        expect($('tab-history').getAttribute('aria-selected')).toBe('true');
+      });
+
+      it('Back returns to the list with the chat still selected, and a bad temperature stays on step 2', async () => {
+        await boot({ run: existingRun(), otherChats: [earlier()] });
+        await openChat();
+        await step1('c9');
+        modalEl().querySelector('#replay-temperature').value = '9';
+        modalEl().querySelector('button[type="submit"]').click();
+        await settle();
+        expect(modalEl().querySelector('.modal-error').textContent).toBe('Temperature must be a number from 0 to 2.');
+        modalEl().querySelector('[data-picker-back]').click();
+        expect(text(modalEl().querySelector('.modal-step'))).toBe('Step 1 of 2');
+        expect(text(modalEl().querySelector('button[type="submit"]'))).toBe('Select');
+        expect(modalEl().querySelector('input[name="chat"]:checked').value).toBe('c9');
+        expect(modalEl().querySelector('[data-picker-back]')).toBeNull();
+      });
     });
 
     it('does nothing while a replay is running', async () => {
@@ -1546,7 +1703,7 @@ describe('replay page', () => {
       expect(detailGets(mock).sort()).toEqual(['cur:a', 'cur:b']);
     });
 
-    it('keeps the pair the user chose when a new replay is saved', async () => {
+    it('moves the selection to the replay that just finished, even when the user had picked another pair', async () => {
       await boot({ run: existingRun({ id: 'cur' }), savedRuns: [savedRun('r1', ['one', 'two'], ['ONE', 'TWO']), savedRun('r2', ['x', 'y'], ['X', 'Y'])] });
       await openTab('diff');
       $('diff-a').value = 'r1:a';
@@ -1556,7 +1713,11 @@ describe('replay page', () => {
       await click('play-replay'); // a new replay finishes and is saved
       await settle(10);
       await openTab('diff');
-      expect($('diff-a').value).toBe('r1:a'); // the user's choice is left alone
+      expect([$('diff-a').value, $('diff-b').value]).toEqual(['cur:a', 'cur:b']); // the replay that just ran, not the earlier choice
+      $('diff-a').value = 'r1:a'; // and the user can still choose again
+      $('diff-a').dispatchEvent(new Event('change'));
+      await settle();
+      expect($('diff-a').value).toBe('r1:a');
     });
 
     it('drops cached details when the run changes, so a continued run is never shown stale', async () => {

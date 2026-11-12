@@ -182,3 +182,22 @@
 .diff-views .diff-settings-btn{margin-left:auto;align-self:center;margin-bottom:6px}
 .diff-views .diff-settings-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2}
 .diff-settings .badge.diff-changed{background:#e6dcff;border-color:#6f42c1;color:#3b1f7a;font-weight:700}
+.source-chat .config-list{margin:0;padding:0 0 0 16px;list-style:disc;font-size:10px;line-height:1.7}
+.config-list b::after{content:': '}
+/* Open a chat, step 2: the source chat's own settings are marked in green */
+.chat-value{display:inline-block;margin-left:4px;padding:1px 7px;border-radius:999px;background:#e3f5e8;border:1px solid #a9dcb7;color:#17632f;font-size:10px;font-weight:700;letter-spacing:0;text-transform:none}
+.model-select.matches-chat,.replay-temperature.matches-chat{border-color:#2e9d52;background:#f2fbf5;box-shadow:0 0 0 2px #d2efdb}
+input.switch.matches-chat{outline:2px solid #2e9d52;outline-offset:2px}
+/* Diff: the Model Diff collapsible under the summary */
+.diff-summary-panel{display:block}
+.model-diff{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
+.model-diff>summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;font-size:13px;font-weight:600}
+.model-diff>summary::-webkit-details-marker{display:none}
+.model-diff>summary::before{content:"›";display:inline-block;width:10px;color:var(--muted);transition:transform .15s}
+.model-diff[open]>summary::before{transform:rotate(90deg)}
+.model-diff-table{width:100%;margin-top:10px;border-collapse:collapse;font-size:12px}
+.model-diff-table th,.model-diff-table td{padding:7px 10px;border:1px solid var(--line);text-align:left;vertical-align:top}
+.model-diff-table thead th{background:var(--soft);font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)}
+.model-diff-table tbody th{font-weight:600;width:28%}
+.model-diff-table td.diff-changed{background:#e6dcff;color:#3b1f7a;font-weight:600}
+.model-diff-none{margin:10px 0 0}

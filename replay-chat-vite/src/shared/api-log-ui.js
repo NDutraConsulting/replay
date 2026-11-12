@@ -118,13 +118,14 @@ export function apiCallHTML(call, index) {
 }
 
 /** The whole log: every prompt with its calls, or the reason there is nothing to show. */
-export function apiLogHTML(log) {
+export function apiLogHTML(log, subject = 'replay') {
+  const Subject = subject[0].toUpperCase() + subject.slice(1);
   if (!log.recorded) {
-    return '<p class="modal-text">No API log was kept for this replay. It was saved before API logs existed.</p>';
+    return `<p class="modal-text">No API log was kept for this ${subject}. ${subject === 'chat' ? 'It started' : 'It was saved'} before API logs existed.</p>`;
   }
   const calls = log.turns.reduce((n, t) => n + t.calls.length, 0);
   if (!calls) {
-    return '<p class="modal-text">No API calls were made. This replay ran in demo mode, so nothing was sent to the provider.</p>';
+    return `<p class="modal-text">No API calls were made. This ${subject} ran in demo mode, so nothing was sent to the provider.</p>`;
   }
   const sections = log.turns
     .filter((t) => t.calls.length)
@@ -134,15 +135,15 @@ export function apiLogHTML(log) {
       return `<section class="api-turn"><h3>Prompt ${String(t.turn_index + 1).padStart(2, '0')} <span class="small">${t.calls.length} ${t.calls.length === 1 ? 'call' : 'calls'}</span></h3><p class="api-prompt">${esc(t.prompt)}</p>${t.calls.map((c, i) => apiCallHTML(c, before + i)).join('')}</section>`;
     })
     .join('');
-  const setTo = log.temperature === undefined ? '' : `<div class="api-settings-line"><span class="chip"><b>Replay temperature</b>${esc(temperatureLabel(log.temperature))}</span><span class="chip"><b>Replay reasoning</b>${esc(reasoningLabel(log.reasoning_level))}</span><span class="chip"><b>Replay log probs</b>${log.logprobs ? 'On' : 'Off'}</span></div>`;
+  const setTo = log.temperature === undefined ? '' : `<div class="api-settings-line"><span class="chip"><b>${Subject} temperature</b>${esc(temperatureLabel(log.temperature))}</span><span class="chip"><b>${Subject} reasoning</b>${esc(reasoningLabel(log.reasoning_level))}</span><span class="chip"><b>${Subject} log probs</b>${log.logprobs ? 'On' : 'Off'}</span></div>`;
   return `<p class="modal-text">${calls} REST ${calls === 1 ? 'call' : 'calls'} to the provider for ${esc(modelLabel(log.model))}, in the order they were sent. The API key is never stored; it shows as a placeholder.</p>${setTo}${sections}`;
 }
 
 /** The API log popup. `title` says which replay it is. */
-export const openApiLogModal = (log, title) =>
+export const openApiLogModal = (log, title, subject = 'replay') =>
   showModal({
     title,
-    bodyHTML: `<div class="api-log">${apiLogHTML(log)}</div>`,
+    bodyHTML: `<div class="api-log">${apiLogHTML(log, subject)}</div>`,
     submitLabel: 'Close',
     cancelLabel: null,
     wide: true,

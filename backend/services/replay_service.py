@@ -56,6 +56,9 @@ from services.history_service import Attachment, Turn
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_REPLAY_REASONING = "none"
+"""The reasoning level a new replay starts with (the chat's own level is only shown, not copied)."""
+
 
 def _stale_seconds(settings: Settings) -> float:
     """A step running longer than two provider timeouts (plus slack) is treated as dead."""
@@ -78,6 +81,7 @@ def _view(settings: Settings, run: ReplayRun, results: list[ReplayResult]) -> Re
         reasoning_level=run.reasoning_level,
         temperature=run.temperature,
         logprobs=run.logprobs,
+        brief_replies=run.brief_replies,
         context_summary=run.context_summary,
         source_conversation_id=run.source_conversation_id,
         cursor=run.cursor,
@@ -249,13 +253,18 @@ async def create(settings: Settings, user: User, request: CreateReplayRunRequest
         if request.kb_summary_tool is not None
         else (conversation.kb_summary_tool if conversation is not None else False)
     )
-    reasoning_level = request.reasoning_level or (
-        conversation.reasoning_level if conversation is not None else "default"
-    )
+    # a replay starts with reasoning off ("none") whatever its chat used, so the models are compared without it; the
+    # Config popup (or the request) can change it before the first step
+    reasoning_level = request.reasoning_level or DEFAULT_REPLAY_REASONING
     temperature = (
         request.temperature
         if request.temperature is not None
         else (conversation.temperature if conversation is not None else 0.0)
+    )
+    brief_replies = (
+        request.brief_replies
+        if request.brief_replies is not None
+        else (conversation.brief_replies if conversation is not None else False)
     )
     run = await replay_run_repository.create(
         settings.DATABASE_PATH,
@@ -270,6 +279,7 @@ async def create(settings: Settings, user: User, request: CreateReplayRunRequest
         source.source_conversation_id,
         temperature,
         bool(request.logprobs),
+        brief_replies,
     )
     return await _full_view(settings, run)
 
@@ -306,6 +316,7 @@ async def update(settings: Settings, user: User, run_id: str, request: UpdateRep
         request.reasoning_level or run.reasoning_level,
         run.temperature if request.temperature is None else request.temperature,
         run.logprobs if request.logprobs is None else request.logprobs,
+        run.brief_replies if request.brief_replies is None else request.brief_replies,
     )
     return await _full_view(settings, await _owned(settings, user, run_id))
 
@@ -381,7 +392,7 @@ async def _answer_slot(
             api_key=provider.api_key,
             model=provider.model,
             system=agent.system_prompt,
-            messages=history_service.render(turns, run.context_summary),
+            messages=history_service.render(turns, run.context_summary, brief=run.brief_replies),
             timeout=settings.LLM_TIMEOUT_SECONDS,
             block_private=settings.BLOCK_PRIVATE_LLM_URLS,
             reasoning_effort=summary_service.effort(run.reasoning_level),
@@ -515,6 +526,7 @@ def _summary(run: ReplayRun, slot: Slot, response_count: int) -> SavedReplaySumm
         reasoning_level=run.reasoning_level,
         temperature=run.temperature,
         logprobs=run.logprobs,
+        brief_replies=run.brief_replies,
         source_conversation_id=run.source_conversation_id,
         prompt_count=len(run.prompts),
         response_count=response_count,

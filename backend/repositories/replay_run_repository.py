@@ -23,6 +23,7 @@ def _run(row: sqlite3.Row) -> ReplayRun:
         reasoning_level=row["reasoning_level"],
         temperature=row["temperature"],
         logprobs=bool(row["logprobs"]),
+        brief_replies=bool(row["brief_replies"]),
         context_summary=row["context_summary"],
         source_conversation_id=row["source_conversation_id"],
         cursor=row["cursor"],
@@ -69,6 +70,7 @@ async def create(
     source_conversation_id: str | None = None,
     temperature: float = 0.0,
     logprobs: bool = False,
+    brief_replies: bool = False,
 ) -> ReplayRun:
     """Create a run. If the user's previous run has results it is saved first, in the same transaction."""
     run_id = str(uuid.uuid4())
@@ -83,8 +85,8 @@ async def create(
         )
         conn.execute(
             "INSERT INTO replay_runs (replay_run_id, user_id, agent_id, prompts_json, model_a, model_b, kb_summary_tool, "
-            "reasoning_level, context_summary, source_conversation_id, created_at, updated_at, temperature, logprobs) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "reasoning_level, context_summary, source_conversation_id, created_at, updated_at, temperature, logprobs, brief_replies) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 run_id,
                 user_id,
@@ -100,6 +102,7 @@ async def create(
                 stamp,
                 temperature,
                 int(logprobs),
+                int(brief_replies),
             ),
         )
         return _run(conn.execute("SELECT * FROM replay_runs WHERE replay_run_id = ?", (run_id,)).fetchone())
@@ -147,11 +150,12 @@ async def update_config(
     reasoning_level: str,
     temperature: float,
     logprobs: bool,
+    brief_replies: bool,
 ) -> None:
     def _update(conn: sqlite3.Connection) -> None:
         conn.execute(
             "UPDATE replay_runs SET model_a = ?, model_b = ?, agent_id = ?, kb_summary_tool = ?, reasoning_level = ?, "
-            "temperature = ?, logprobs = ?, updated_at = ? WHERE replay_run_id = ?",
+            "temperature = ?, logprobs = ?, brief_replies = ?, updated_at = ? WHERE replay_run_id = ?",
             (
                 model_a,
                 model_b,
@@ -160,6 +164,7 @@ async def update_config(
                 reasoning_level,
                 temperature,
                 int(logprobs),
+                int(brief_replies),
                 _now(),
                 run_id,
             ),
