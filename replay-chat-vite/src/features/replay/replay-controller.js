@@ -20,7 +20,7 @@ import {
 } from './replay-api.js';
 import {
   applyPromptsHidden, applySelectorsHidden, bindDiff, bindHistory, bindReplayConfig, bindReplayControls, bindTabs, focusTab, replayConfigHTML,
-  chatReplays, currentReplayNumber, diffSettingsHTML, openReplayIntro, replayPageHTML, replayVersions,
+  chatReplays, currentReplayNumber, diffSettingsHTML, elapsedText, openReplayIntro, replayPageHTML, replayVersions,
 } from './replay-ui.js';
 
 /** Orchestrates the replay page: API (runs and saved replays on the server) <-> UI (markup + DOM). */
@@ -70,6 +70,8 @@ export const initReplay = () =>
       diffB: '',
       diffChosen: false, // true once the user picks a pair; until then, and whenever a replay finishes, the Diff follows the newest saved replays
       replayBusy: false,
+      stepStartedAt: 0,
+      failedPrompt: -1,
       playing: false,
       stepped: false, // the Model responses panel shows only once Step through is used
       playOverlay: null, // 'running' | 'done' while Play all has its popup up
@@ -268,6 +270,13 @@ export const initReplay = () =>
       state.replayBusy = true;
       state.abort = new AbortController();
       state.stepRequestId = newRequestId();
+      state.stepStartedAt = Date.now();
+      const promptIndex = state.replay.cursor;
+      state.failedPrompt = -1;
+      const ticker = setInterval(() => {
+        const el = document.getElementById('step-elapsed');
+        if (el) el.textContent = elapsedText(state.stepStartedAt);
+      }, 50);
       render();
       let ok = true;
       try {
@@ -286,10 +295,12 @@ export const initReplay = () =>
         state.playing = false;
         if (err.name === 'AbortError' || err.code === 'stopped') toast('Playback stopped. Resume from this prompt.');
         else toastError(err);
+        if (err.name !== 'AbortError' && err.code !== 'stopped') state.failedPrompt = promptIndex;
         await state.stopping; // the stop command must reach the server before we ask what it has
         state.stopping = null;
         await syncRun();
       } finally {
+        clearInterval(ticker);
         state.replayBusy = false;
         state.abort = null;
         render();
