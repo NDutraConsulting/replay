@@ -12,6 +12,8 @@ import { CLIFF_THRESHOLD, parseThreshold } from '../../shared/logprob-cliffs.js'
 import { parseTemperature } from '../../shared/temperature.js';
 import { mountReplayFileMenu } from './replay-file-menu.js';
 import { startPage } from '../../shared/shell-ui.js';
+import { createLessonPlayer } from '../lessons/lesson-player.js';
+import { firstLesson, openLessonsList } from '../lessons/lessons-list-ui.js';
 import { showModal } from '../../shared/modal-ui.js';
 import { toast, toastError } from '../../shared/toast.js';
 import {
@@ -532,9 +534,15 @@ export const initReplay = () =>
       },
     };
 
-    mountReplayFileMenu({ onConfig: openConfig, onOpen: () => historyHandlers.onOpenChat() });
+    const lessonPlayer = createLessonPlayer();
+    mountReplayFileMenu({
+      onConfig: openConfig,
+      onOpen: () => historyHandlers.onOpenChat(),
+      onLessons: () => openLessonsList('replay', lessonPlayer),
+    });
     render();
-    openReplayIntro(); // what this page is for, shown each time it opens
+    const lesson = await firstLesson('replay');
+    openReplayIntro(lesson ? () => lessonPlayer.start(lesson.slug).catch(toastError) : null); // what this page is for, shown each time it opens, with a way into the lesson
   });
 
 initReplay();

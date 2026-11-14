@@ -74,19 +74,21 @@ export function placeLayer(layer, rect, placement = 'auto') {
     left: hole.left - GAP - w >= MARGIN,
   };
   const opposite = { top: 'bottom', bottom: 'top', left: 'right', right: 'left' };
-  const first = placement === 'auto' ? 'bottom' : placement;
+  const [named, align] = placement.split('-'); // 'top-end' / 'bottom-end': the card's right end lines up with the target's
+  const first = named === 'auto' ? 'bottom' : named;
   const side = [first, opposite[first], 'bottom', 'top', 'right', 'left'].find((s) => fits[s]) ?? null;
   const clamp = (v, max) => Math.min(Math.max(MARGIN, v), Math.max(MARGIN, max));
   let left;
   let top;
   if (side === 'top' || side === 'bottom') {
-    left = clamp(hole.left, vw - w - MARGIN);
+    left = clamp(align === 'end' && side === first ? hole.right - w : hole.left, vw - w - MARGIN);
     top = side === 'top' ? hole.top - GAP - h : hole.bottom + GAP;
   } else if (side === 'left' || side === 'right') {
     left = side === 'right' ? hole.right + GAP : hole.left - GAP - w;
     top = clamp(hole.top, vh - h - MARGIN);
   } else {
-    left = clamp((vw - w) / 2, vw - w - MARGIN); // nowhere beside it: over the bottom of the screen
+    // nowhere beside it (a target taller than the screen): over the bottom of the screen, at the right if asked to
+    left = clamp(align === 'end' ? Math.min(hole.right, vw) - w : (vw - w) / 2, vw - w - MARGIN);
     top = clamp(vh - h - MARGIN, vh - h - MARGIN);
   }
   card.style.left = px(left);

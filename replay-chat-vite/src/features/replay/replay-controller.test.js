@@ -1394,6 +1394,44 @@ describe('replay page', () => {
       expect(text(document.querySelector('.modal h2'))).toBe('Open a chat');
     });
 
+    const REPLAY_LESSON = { slug: 'replay-compare-models', page: 'replay', title: 'Replay a chat and compare two models', summary: 's', step_count: 24, progress: { status: 'not_started', current_step: 0 } };
+    const lessonWorld = (lessons) => ({
+      appOverrides: {
+        lessons,
+        lessonDetails: { 'replay-compare-models': { ...REPLAY_LESSON, version: 1, steps: [{ position: 0, title: 'Welcome to Replay!', body: 'Hi', target: null, action: 'none', action_arg: null, on_next: 'none', on_target_gone: 'stop', placement: 'auto', avatar: { avatar_slug: 'guide', file: 'guide.webp', alt: 'Rex', facing: 'front' } }] } },
+      },
+    });
+
+    it('has a Take lesson button beside Got it when the page has a lesson, and it starts the lesson', async () => {
+      await boot({ run: existingRun(), keepIntro: true, ...lessonWorld([REPLAY_LESSON]) });
+      const buttons = [...document.querySelectorAll('.replay-intro-modal .modal-actions button')].map(text);
+      expect(buttons).toEqual(['Take lesson', 'Got it']);
+      document.getElementById('take-lesson').click();
+      await settle();
+      expect(document.querySelector('.replay-intro-modal')).toBeNull(); // the popup is closed
+      expect(document.querySelector('.lesson-title').textContent).toBe('Welcome to Replay!');
+      document.querySelector('[data-lesson-skip]').click();
+    });
+
+    it('offers it again to someone who finished the lesson (they may want to redo it)', async () => {
+      await boot({ run: existingRun(), keepIntro: true, ...lessonWorld([{ ...REPLAY_LESSON, progress: { status: 'completed', current_step: 23 } }]) });
+      expect(document.getElementById('take-lesson')).not.toBeNull();
+    });
+
+    it('has no Take lesson button when there is no lesson for the page (only Got it)', async () => {
+      await boot({ run: existingRun(), keepIntro: true });
+      expect(document.getElementById('take-lesson')).toBeNull();
+      expect([...document.querySelectorAll('.replay-intro-modal .modal-actions button')].map(text)).toEqual(['Got it']);
+    });
+
+    it('Got it still just closes the popup, with the lesson on offer', async () => {
+      await boot({ run: existingRun(), keepIntro: true, ...lessonWorld([REPLAY_LESSON]) });
+      document.querySelector('.replay-intro-modal button[type="submit"]').click();
+      await settle();
+      expect(document.querySelector('.replay-intro-modal')).toBeNull();
+      expect(document.querySelector('.lesson-layer')).toBeNull();
+    });
+
     it('focuses its button so Enter closes it', async () => {
       await boot({ run: existingRun(), keepIntro: true });
       expect(document.activeElement).toBe(document.querySelector('.replay-intro-modal button[type="submit"]'));
@@ -1401,11 +1439,44 @@ describe('replay page', () => {
   });
 
   describe('the File menu', () => {
-    it('has Open and Config but no New, which this page does not use', async () => {
+    it('has Open, Lessons and Config but no New, which this page does not use', async () => {
       await boot({ run: existingRun() });
       $('file-menu-btn').click();
-      expect([...document.querySelectorAll('#file-menu .file-menu-item')].map(text)).toEqual(['Open', 'Config']);
+      expect([...document.querySelectorAll('#file-menu .file-menu-item')].map(text)).toEqual(['Open', 'Lessons', 'Config']);
       expect($('file-new')).toBeNull();
+    });
+
+    it('Lessons lists the lessons for the Replay page only', async () => {
+      const lesson = (slug, page, title) => ({ slug, page, title, summary: `${title} summary`, step_count: 24, progress: { status: 'not_started', current_step: 0 } });
+      await boot({ run: existingRun(), appOverrides: { lessons: [lesson('chat-start-conversation', 'chat', 'Start a conversation'), lesson('replay-compare-models', 'replay', 'Replay a chat and compare two models')] } });
+      $('file-menu-btn').click();
+      $('file-lessons').click();
+      await settle();
+      expect(document.querySelector('.modal-head h2').textContent).toBe('Lessons');
+      expect([...document.querySelectorAll('.lesson-list h3')].map(text)).toEqual(['Replay a chat and compare two models']);
+      expect(document.querySelector('[data-lesson]').dataset.lesson).toBe('replay-compare-models');
+    });
+
+    // The Replay lesson (backend/db/lesson_seeds/replay_compare_models.py) points at these; a rename breaks it.
+    it('keeps the ids the replay lesson points at: File > Open, the picker, its settings step, the tabs and the Replay tab', async () => {
+      const chat = { conversation_id: 'lesson-replay-compare-models-u1', is_sample: false, name: 'Lesson: Happiness books', agent_id: 'assistant', model: 'model-a', reasoning_level: 'default', kb_summary_tool: false, source_conversation_id: null, created_at: '2025-12-01T00:00:00Z', updated_at: '2025-12-02T00:00:00Z', prompt_count: 2, messages: chatMessages('p1', 'p2') }; // fmt: skip
+      await boot({ run: existingRun(), otherChats: [chat] });
+      expect($('file-open')).not.toBeNull();
+      expect(['tab-history', 'tab-replay', 'tab-diff', 'workspace-content'].map((id) => $(id) !== null)).toEqual([true, true, true, true]);
+      $('file-menu-btn').click();
+      $('file-open').click();
+      await settle();
+      expect(document.querySelector('.modal .chat-options')).not.toBeNull();
+      expect(document.querySelector(".modal input[value^='lesson-replay-compare-models-']")).not.toBeNull();
+      expect(document.querySelector('.modal .modal-actions button[type=submit]')).not.toBeNull();
+      document.querySelector('.modal button[type="submit"]').click(); // Select
+      await settle();
+      for (const id of ['replay-agent', 'model-a', 'model-b', 'replay-reasoning', 'replay-temperature', 'replay-kb-summary', 'replay-brief', 'replay-logprobs']) {
+        expect(document.querySelector(`.modal #${id}`), `#${id}`).not.toBeNull();
+      }
+      document.querySelector('.modal-head [data-modal-close]').click();
+      await openTab('replay');
+      expect(['prompts-panel', 'play-replay'].map((id) => $(id) !== null)).toEqual([true, true]);
     });
 
     it('still opens a chat and the Config popup from it', async () => {

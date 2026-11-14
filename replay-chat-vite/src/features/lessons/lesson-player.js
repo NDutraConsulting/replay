@@ -2,6 +2,15 @@ import { toast, toastError } from '../../shared/toast.js';
 import * as defaultApi from './lessons-api.js';
 import { createLayer, placeLayer } from './lesson-ui.js';
 
+/**
+ * What the player is doing, kept in one place so the handlers below do not have to guess from side effects:
+ *  closed  no lesson is on screen
+ *  step    a step is showing and waits for the user (Next, or the real control)
+ *  acting  the user, or Next on their behalf, has just used the step's control. The page is allowed to react to that (a popup
+ *          closes, a tab redraws) without the lesson taking it for the user leaving, and the lesson moves on by itself.
+ */
+const MODE = { closed: 'closed', step: 'step', acting: 'acting' };
+
 const FIND_TIMEOUT_MS = 4000; // the Diff loads its replays from the server after the tab opens
 
 /**
@@ -16,6 +25,7 @@ export function createLessonPlayer({ api = defaultApi } = {}) {
   let layer = null;
   let target = null;
   let token = 0; // bumped on every step, so a late timer or observer from an earlier step does nothing
+  let mode = MODE.closed;
   let submitted = false; // a form was submitted during this step (the Start conversation click)
   let cleanups = [];
 
@@ -39,6 +49,7 @@ export function createLessonPlayer({ api = defaultApi } = {}) {
     layer?.remove();
     layer = null;
     lesson = null;
+    mode = MODE.closed;
   }
 
   const save = (position, status) => {
@@ -71,7 +82,10 @@ export function createLessonPlayer({ api = defaultApi } = {}) {
   }
 
   /** Bring the target to the middle of whatever scrolls it (the popup, or the page) so the spotlight and card stay on screen. */
-  const scrollToTarget = (el) => el.scrollIntoView?.({ block: 'center', inline: 'nearest' });
+  const scrollToTarget = (el) => {
+    const tall = el.getBoundingClientRect().height > window.innerHeight * 0.7; // a long target is shown from its top, not its middle
+    el.scrollIntoView?.({ block: tall ? 'start' : 'center', inline: 'nearest' });
+  };
 
   let frame = 0;
   function reposition() {
@@ -84,6 +98,7 @@ export function createLessonPlayer({ api = defaultApi } = {}) {
 
   function targetGone() {
     const s = step();
+    if (mode === MODE.acting && s.on_target_gone !== 'next') return; // the control was just used: its move on is already coming
     if (s.on_target_gone === 'next' && submitted) show(index + 1);
     else {
       removeLayer();
@@ -134,6 +149,8 @@ export function createLessonPlayer({ api = defaultApi } = {}) {
         'click',
         (e) => {
           if (!e.target.closest?.(s.target)) return;
+          if (s.on_target_gone === 'next') return; // a submit: the lesson moves on when its popup closes after the submit
+          mode = MODE.acting; // before the page handles the click, so what it does next is not mistaken for the user leaving
           setTimeout(() => {
             if (my === token && lesson) show(index + 1); // the user clicked it themselves
           });
@@ -148,6 +165,7 @@ export function createLessonPlayer({ api = defaultApi } = {}) {
     token += 1;
     const my = token;
     submitted = false;
+    mode = MODE.step;
     index = i;
     const s = step();
     layer?.remove();
@@ -162,15 +180,17 @@ export function createLessonPlayer({ api = defaultApi } = {}) {
     const found = document.querySelector(s.target);
     if (found) return ready(s, found, false);
     // not on the page yet (the popup is still opening): wait a moment, then carry on without a spotlight
+    let timer = 0;
     const watch = new MutationObserver(() => {
       const el = document.querySelector(s.target);
       if (el && my === token) {
         watch.disconnect();
+        clearTimeout(timer); // found in time: the "can't find it" fallback must not fire later and throw the card to the middle
         ready(s, el, false);
       }
     });
     watch.observe(document.body, { childList: true, subtree: true });
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       watch.disconnect();
       if (my === token) ready(s, null, true);
     }, FIND_TIMEOUT_MS);
@@ -189,7 +209,11 @@ export function createLessonPlayer({ api = defaultApi } = {}) {
       removeLayer(); // Finish: the last step already saved "completed"
       return;
     }
-    if (step().on_next === 'click' && target?.isConnected) target.click();
+    const s = step();
+    if (s.on_next === 'click' && target?.isConnected) {
+      target.click();
+      if (s.on_target_gone === 'next') return; // a submit: stay until the popup closes (the result may be an error that keeps it open)
+    }
     show(index + 1);
   }
 
@@ -234,6 +258,10 @@ export function createLessonPlayer({ api = defaultApi } = {}) {
     skip,
     get active() {
       return lesson !== null;
+    },
+    /** 'closed' | 'step' | 'acting' (see MODE). */
+    get mode() {
+      return mode;
     },
     get stepPosition() {
       return lesson ? step().position : null;

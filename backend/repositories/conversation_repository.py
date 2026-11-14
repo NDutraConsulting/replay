@@ -352,3 +352,61 @@ async def delete_one(db_path: str, user_id: str, conversation_id: str) -> bool:
         return True
 
     return await run_in_db(db_path, _run)
+
+
+LESSON_SAMPLE_STAMP = "2000-01-01T00:00:00+00:00"
+"""A lesson's sample chat is dated long ago, so it is never the user's "latest" chat (the one the Chat page opens)."""
+
+
+async def ensure_lesson_sample(
+    db_path: str,
+    user_id: str,
+    conversation_id: str,
+    *,
+    name: str,
+    agent_id: str,
+    model: str,
+    temperature: float,
+    brief_replies: bool,
+    messages: list[dict],
+) -> bool:
+    """Put a lesson's sample chat in the user's chat history if it is not there. Idempotent (a fixed conversation id), so it
+    never duplicates and never overwrites a chat the user has since changed. A chat the user deleted comes back the next time
+    the lesson is opened. The assistant's answers are canned text, so they are marked `demo`. Returns True when it was added."""
+
+    def _run(conn: sqlite3.Connection) -> bool:
+        cursor = conn.execute(
+            "INSERT OR IGNORE INTO conversations (conversation_id, user_id, is_sample, name, agent_id, model, "
+            "reasoning_level, kb_summary_tool, source_conversation_id, created_at, updated_at, temperature, brief_replies) "
+            "VALUES (?, ?, 0, ?, ?, ?, 'default', 0, NULL, ?, ?, ?, ?)",
+            (
+                conversation_id,
+                user_id,
+                name,
+                agent_id,
+                model,
+                LESSON_SAMPLE_STAMP,
+                LESSON_SAMPLE_STAMP,
+                temperature,
+                int(brief_replies),
+            ),
+        )
+        if cursor.rowcount == 0:
+            return False
+        for number, message in enumerate(messages, start=1):
+            conn.execute(
+                "INSERT INTO messages (message_id, conversation_id, sequence_number, role, content, status, model, agent, "
+                "demo, created_at) VALUES (?, ?, ?, ?, ?, 'complete', NULL, NULL, ?, ?)",
+                (
+                    str(uuid.uuid4()),
+                    conversation_id,
+                    number,
+                    message["role"],
+                    message["content"],
+                    int(message["role"] == "assistant"),
+                    LESSON_SAMPLE_STAMP,
+                ),
+            )
+        return True
+
+    return await run_in_db(db_path, _run)

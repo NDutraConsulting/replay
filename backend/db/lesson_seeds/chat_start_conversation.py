@@ -3,7 +3,8 @@
 `target` selectors are the ids in `openNewConversationModal` (replay-chat-vite/src/features/chat/chat-ui.js) and the File menu;
 a frontend test checks that every one still exists. Body text is plain; **double stars** make bold.
 `action` runs when the step appears; `on_next: click` means Next clicks the target for the user (and so does the user's own
-click); `on_target_gone: next` means the step is done when its target disappears (the popup closed because Start was clicked).
+click); `on_target_gone: next` means the step is done when its target disappears (the popup closed because Start was clicked). With both
+`on_next: click` and `on_target_gone: next`, Next clicks the target and the step waits for it to go (the replay lesson's Open).
 """
 
 _FIELD = "#new-chat-"
@@ -63,7 +64,7 @@ CHAT_START_CONVERSATION = {
             4,
             "Pick an API provider",
             "The provider is the service that runs the model. You add providers on your Account page. "
-            "Pick the one you want to use, and the model list below follows it.",
+            "Choose **OpenAI**, and the model list below follows it.",
             "golden-ai-orb",
             _FIELD + "provider",
             action="open-select",
@@ -73,7 +74,7 @@ CHAT_START_CONVERSATION = {
             5,
             "Pick a model",
             "The model is the AI that writes the answers. The list shows only the models of the provider you chose. "
-            "Bigger models are slower and cost more.",
+            "Choose **gpt-5.5**.",
             "tesseract",
             _FIELD + "model",
             action="open-select",
@@ -83,7 +84,8 @@ CHAT_START_CONVERSATION = {
             6,
             "Pick a reasoning level",
             "Reasoning is how much the model thinks before it answers. More thinking can mean better answers, but "
-            "slower and more expensive ones. **Default** lets the model decide, and it is fine for now.",
+            "slower and more expensive ones. Choose **None**. A reasoning model only accepts a temperature when "
+            "reasoning is None, and the next step needs that.",
             "thoughtful",
             _FIELD + "reasoning",
             action="open-select",
@@ -93,8 +95,8 @@ CHAT_START_CONVERSATION = {
             7,
             "Temperature: choose 0",
             "Temperature is how much randomness the model adds when it picks each next word. High values give varied, "
-            "creative answers, and the same prompt can come back different every time. Choose **0** so the same prompt "
-            "gives (almost) the same answer. That is what you need to compare conversations and replays fairly.",
+            "creative answers, and the same prompt can come back different every time. Reasoning is None, so the model "
+            "accepts a temperature. Choose **0** so the same prompt gives (almost) the same answer. That is what you need to compare conversations and replays fairly.",
             "rubiks-cube",
             _FIELD + "temperature",
             action="focus",

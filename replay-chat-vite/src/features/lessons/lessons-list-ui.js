@@ -17,6 +17,15 @@ export async function tourLesson(page) {
   }
 }
 
+/** The first lesson for a page (shown or not, finished or not), or null when it has none or the list cannot be loaded. */
+export async function firstLesson(page) {
+  try {
+    return (await listLessons(page))[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** File > Lessons: the lessons for this page. Choosing one closes the popup and starts it. */
 export async function openLessonsList(page, player) {
   let lessons;

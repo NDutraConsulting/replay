@@ -183,6 +183,29 @@ describe('lesson player', () => {
     expect(title()).toBe('Step 2');
   });
 
+  it('the user clicking the real control instead of Next moves on and does not close the lesson, even when the page removes the control', async () => {
+    document.body.insertAdjacentHTML('beforeend', '<div id="popup"><button id="done" type="button">Diff Chat</button></div>');
+    document.getElementById('done').addEventListener('click', () => document.getElementById('popup').remove()); // like the Play all popup closing
+    await begin([step(0), step(1, { target: '#done', on_next: 'click' }), step(2, { target: '#name' })]);
+    press('[data-lesson-next]');
+    document.getElementById('done').click(); // the user, not Next
+    await settle();
+    expect(layer()).not.toBeNull();
+    expect(title()).toBe('Step 2');
+    expect(document.querySelector('.toast')).toBeNull();
+    expect(player.mode).toBe('step');
+  });
+
+  it('closing the page\'s popup some other way, without using the control, still pauses the lesson', async () => {
+    document.body.insertAdjacentHTML('beforeend', '<div id="popup"><button id="done" type="button">Go</button></div>');
+    await begin([step(0), step(1, { target: '#done', on_next: 'click' }), step(2)]);
+    press('[data-lesson-next]');
+    document.getElementById('popup').remove();
+    await settle();
+    expect(layer()).toBeNull();
+    expect(player.mode).toBe('closed');
+  });
+
   it('a press on the lesson does not reach the page (so the File menu stays open)', async () => {
     const onPage = vi.fn();
     document.addEventListener('mousedown', onPage);
@@ -201,14 +224,73 @@ describe('lesson player', () => {
     expect(document.querySelector('.lesson-ring').hidden).toBe(false);
   });
 
+  it('a target that appears in time stays spotlighted: the fallback timer is cancelled and the step does not change', async () => {
+    vi.useFakeTimers();
+    await begin([step(0), step(1, { target: '#later' }), step(2)]);
+    press('[data-lesson-next]');
+    document.body.insertAdjacentHTML('beforeend', '<input id="later">');
+    await vi.advanceTimersByTimeAsync(10);
+    expect(document.querySelector('.lesson-ring').hidden).toBe(false);
+    await vi.advanceTimersByTimeAsync(10000); // well past the wait for a missing target
+    expect(document.querySelector('.lesson-ring').hidden).toBe(false);
+    expect(document.querySelector('.lesson-missing').hidden).toBe(true);
+    expect(title()).toBe('Step 1');
+  });
+
   it('a target that never appears falls back to a centred card that says so', async () => {
     vi.useFakeTimers();
     await begin([step(0), step(1, { target: '#nope' }), step(2)]);
     press('[data-lesson-next]');
-    vi.advanceTimersByTime(2100);
+    vi.advanceTimersByTime(4100);
     expect(document.querySelector('.lesson-missing').hidden).toBe(false);
     press('[data-lesson-next]'); // the user is never trapped
     expect(title()).toBe('Step 2');
+  });
+
+  it('check-radio picks the lesson\'s own radio, open-details opens a details box', async () => {
+    document.body.insertAdjacentHTML('beforeend', '<div id="list"><input type="radio" name="c" value="other"><input type="radio" name="c" value="lesson-x-1"></div><details id="more"><summary>More</summary>x</details>');
+    await begin([
+      step(0),
+      step(1, { target: '#list', action: 'check-radio', action_arg: "input[value^='lesson-x-']" }),
+      step(2, { target: '#more', action: 'open-details' }),
+    ]);
+    press('[data-lesson-next]');
+    expect(document.querySelector('input[value="lesson-x-1"]').checked).toBe(true);
+    expect(document.querySelector('input[value="other"]').checked).toBe(false);
+    press('[data-lesson-next]');
+    expect(document.getElementById('more').open).toBe(true);
+  });
+
+  it('keeps the spotlight when the page redraws the target (a new element with the same selector)', async () => {
+    document.body.insertAdjacentHTML('beforeend', '<main id="m"><button id="tab">Tab</button></main>');
+    await begin([step(0), step(1, { target: '#tab' }), step(2)]);
+    press('[data-lesson-next]');
+    document.getElementById('m').innerHTML = '<button id="tab">Tab again</button>'; // like render() rebuilding main
+    await settle();
+    expect(layer()).not.toBeNull();
+    expect(title()).toBe('Step 1');
+    expect(document.querySelector('.toast')).toBeNull();
+  });
+
+  it('a step that waits disables Next, then moves on by itself when its element appears', async () => {
+    document.body.insertAdjacentHTML('beforeend', '<div id="popup"><span id="busy">running</span></div>');
+    await begin([step(0), step(1, { target: '#popup', advance_on: '#popup .done' }), step(2)]);
+    press('[data-lesson-next]');
+    expect(document.querySelector('[data-lesson-next]').disabled).toBe(true);
+    expect(document.querySelector('[data-lesson-next]').textContent).toBe('Waiting…');
+    document.getElementById('popup').innerHTML = '<span class="done">done</span>'; // the page redraws the popup as finished
+    await settle();
+    expect(title()).toBe('Step 2');
+  });
+
+  it('a waiting step whose popup disappears (stopped, failed) pauses instead of waiting forever', async () => {
+    document.body.insertAdjacentHTML('beforeend', '<div id="popup"></div>');
+    await begin([step(0), step(1, { target: '#popup', advance_on: '#popup .done' }), step(2)]);
+    press('[data-lesson-next]');
+    document.getElementById('popup').remove();
+    await settle();
+    expect(layer()).toBeNull();
+    expect(document.querySelector('.toast').textContent).toMatch(/paused/i);
   });
 
   it('on_target_gone next: moves on after the form was submitted and the popup went away', async () => {
@@ -218,6 +300,25 @@ describe('lesson player', () => {
     press('[data-lesson-next]');
     document.getElementById('f').requestSubmit();
     document.getElementById('f').remove();
+    await settle();
+    expect(title()).toBe('Step 2');
+  });
+
+  it('Next clicks a submit target and stays until its popup closes (on_next click with on_target_gone next)', async () => {
+    document.body.insertAdjacentHTML('beforeend', '<form id="f"><button id="go" type="submit">Open</button></form>');
+    let closeIt;
+    document.getElementById('f').addEventListener('submit', (e) => {
+      e.preventDefault();
+      closeIt = () => document.getElementById('f').remove(); // the page closes it after its server call
+    });
+    await begin([step(0), step(1, { target: '#go', on_next: 'click', on_target_gone: 'next' }), step(2)]);
+    press('[data-lesson-next]');
+    press('[data-lesson-next]'); // Next: clicks Open for the user
+    expect(closeIt).toBeTypeOf('function');
+    expect(title()).toBe('Step 1'); // not moved on yet: the popup is still open
+    await settle();
+    expect(title()).toBe('Step 1');
+    closeIt();
     await settle();
     expect(title()).toBe('Step 2');
   });

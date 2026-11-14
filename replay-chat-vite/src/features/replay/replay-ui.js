@@ -33,13 +33,27 @@ export function replayTabsHTML(v){const {replay,replayTab,replayBusy,playing,act
  * What the Replay page is for, in a popup that opens when the page does (it used to be the page's heading).
  * One button closes it; Escape and a click outside do too.
  */
-export const openReplayIntro = () =>
+export const openReplayIntro = (onLesson = null) =>
   showModal({
     title: 'Model & hardware comparison',
     bodyHTML: '<p class="modal-lead">Same conversation. Different results.</p><p class="modal-text">Replay your prompts on other models, then compare how the output differs.</p>',
     submitLabel: 'Got it',
     cancelLabel: null,
     className: 'replay-intro-modal',
+    // With a lesson to offer, a "Take lesson" button sits beside "Got it" (it closes the popup and starts the lesson).
+    onMount(form, handle) {
+      if (!onLesson) return;
+      const take = document.createElement('button');
+      take.type = 'button';
+      take.className = 'btn';
+      take.id = 'take-lesson';
+      take.textContent = 'Take lesson';
+      take.onclick = () => {
+        handle.close();
+        onLesson();
+      };
+      form.querySelector('button[type="submit"]').before(take);
+    },
   });
 
 export function replayPageHTML(v){

@@ -80,11 +80,11 @@ describe('each page has its own File menu', () => {
     expect([onNew.mock.calls.length, onOpen.mock.calls.length]).toEqual([1, 1]);
   });
 
-  it('Replay: Open and Config, no New', () => {
+  it('Replay: Open, Lessons and Config, no New', () => {
     const onOpen = vi.fn();
     const onConfig = vi.fn();
     mountReplayFileMenu({ onOpen, onConfig });
-    expect(items()).toEqual(['Open', 'Config']);
+    expect(items()).toEqual(['Open', 'Lessons', 'Config']);
     document.getElementById('file-menu-btn').click();
     document.getElementById('file-config').click();
     expect(onConfig).toHaveBeenCalledTimes(1);
