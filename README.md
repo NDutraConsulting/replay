@@ -33,6 +33,18 @@ you see them for yourself, with your own prompts.
 
 Without a connected API the app runs in **demo mode** with canned replies, so every control can be tried first.
 
+## See it
+
+The same chat was replayed twice on the same model (`gpt-5.5`, reasoning None, temperature 0). The requests are identical, and the answers still differ.
+
+**The Diff tab, Chat view:** both replays side by side, with the words that differ highlighted (blue in A, yellow in B).
+
+![The Diff tab, Chat view: two replays of the same prompt on gpt-5.5 at temperature 0, with the differing words highlighted](zimages/text-diff.png)
+
+**The Diff tab, API logs view:** the raw request behind each answer. Both sent the same prompt to `gpt-5.5` with `reasoning_effort` "none" and `temperature` 0, so nothing in the request explains the difference in the answers.
+
+![The Diff tab, API logs view: the two requests are identical, with reasoning_effort none and temperature 0](zimages/temperature-proof.png)
+
 ## Repository layout
 
 | Folder                                            | What it is                                                                                                                            |
@@ -103,8 +115,8 @@ cd replay-chat-vite && npm run test:live   # drives every page against a real ba
 
 | Page      | URL             | What it is for                                                                          |
 | --------- | --------------- | --------------------------------------------------------------------------------------- |
-| Chat      | `/index.html`   | Talk to an agent. File menu: New, Open, Config.                                         |
-| Replay    | `/replay.html`  | Replay a chat on two models, then compare in History and Diff. File menu: Open, Config. |
+| Chat      | `/index.html`   | Talk to an agent. File menu: New, Open, Lessons, Config.                                   |
+| Replay    | `/replay.html`  | Replay a chat on two models, then compare in History and Diff. File menu: Open, Lessons, Config. |
 | AI agents | `/agents.html`  | Edit an agent's knowledge base. File menu: Open agent and the Add items.                |
 | Account   | `/account.html` | Your APIs and their models.                                                             |
 | Login     | `/login.html`   | Sign in or sign up.                                                                     |
