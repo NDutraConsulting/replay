@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 from db.connection import run_in_db
 from models.conversation import Message
+from repositories.conversation_errors import ConversationLocked
 
 
 def _now() -> str:
@@ -211,6 +212,11 @@ async def begin_turn(
 
     def _run(conn: sqlite3.Connection) -> tuple[Message, bool]:
         conn.execute("BEGIN IMMEDIATE")
+        locked = conn.execute(
+            "SELECT locked_at FROM conversations WHERE conversation_id = ?", (conversation_id,)
+        ).fetchone()
+        if locked is not None and locked["locked_at"] is not None:
+            raise ConversationLocked  # checked in the same transaction as the insert, so a lock never races a send
         conn.execute(
             "UPDATE messages SET status = 'failed' WHERE conversation_id = ? AND role = 'user' AND status = 'pending'",
             (conversation_id,),
@@ -239,7 +245,7 @@ async def finish_reply(
     Returns (outcome, user_message, assistant_message):
       "complete" - the prompt was still pending: user message -> complete, reply stored as complete
       "ignored"  - the user sent a stop first (or the prompt was superseded): reply stored as `ignored`
-      "gone"     - the prompt no longer exists (rewound): nothing stored
+      "gone"     - the prompt no longer exists (its conversation was deleted): nothing stored
     """
 
     def _run(conn: sqlite3.Connection) -> tuple[str, Message | None, Message | None]:
@@ -311,35 +317,5 @@ async def stop(db_path: str, conversation_id: str, request_id: str | None = None
             (conversation_id, request_id, _now()),
         )
         return True
-
-    return await run_in_db(db_path, _run)
-
-
-async def rewind(db_path: str, conversation_id: str) -> tuple[str, list[str]] | None:
-    """Delete the last user message and everything after it.
-    Returns (the removed prompt, the request ids of the removed prompts), or None when there is no prompt."""
-
-    def _run(conn: sqlite3.Connection) -> tuple[str, list[str]] | None:
-        conn.execute("BEGIN IMMEDIATE")
-        row = conn.execute(
-            "SELECT sequence_number, content FROM messages WHERE conversation_id = ? AND role = 'user' "
-            "AND message_type = 'chat' ORDER BY sequence_number DESC LIMIT 1",
-            (conversation_id,),
-        ).fetchone()
-        if row is None:
-            return None
-        removed = conn.execute(
-            "SELECT DISTINCT request_id FROM messages WHERE conversation_id = ? AND sequence_number >= ? AND request_id IS NOT NULL",
-            (conversation_id, row["sequence_number"]),
-        ).fetchall()
-        conn.execute(
-            "DELETE FROM messages WHERE conversation_id = ? AND sequence_number >= ?",
-            (conversation_id, row["sequence_number"]),
-        )
-        conn.execute(
-            "UPDATE conversations SET is_sample = 0, updated_at = ? WHERE conversation_id = ?",
-            (_now(), conversation_id),
-        )
-        return row["content"], [r["request_id"] for r in removed]
 
     return await run_in_db(db_path, _run)

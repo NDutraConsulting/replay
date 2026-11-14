@@ -27,6 +27,44 @@ describe('apiLogHTML for a chat', () => {
   });
 });
 
+describe('turns copied into a fork', () => {
+  const forked = (extra) => ({ ...turn(0, [call()]), ...extra });
+
+  it('says which conversation made the calls', () => {
+    const html = apiLogHTML(log([forked({ source_conversation_id: 'c1', source_conversation_name: 'Launch <plan>' })]), 'chat');
+    expect(html).toContain('From Launch &lt;plan&gt;: this response was produced in the source conversation.');
+  });
+
+  it('says so when that conversation has been deleted', () => {
+    const html = apiLogHTML(log([forked({ source_conversation_id: 'c1', source_conversation_name: null })]), 'chat');
+    expect(html).toContain('From a deleted conversation.');
+  });
+
+  it('says nothing for a turn the conversation made itself, or for a replay', () => {
+    expect(apiLogHTML(log([forked({ source_conversation_id: null })]), 'chat')).not.toContain('api-source');
+    expect(apiLogHTML(log([turn(0, [call()])]))).not.toContain('api-source');
+  });
+});
+
+describe('retry chips on a chat call', () => {
+  const chips = (extra) => apiCallHTML(call(extra), 0);
+
+  it('shows nothing for a first attempt that succeeded, or for a replay call without the fields', () => {
+    expect(chips({ request_retry_counter: 0, response_status: 'success', api_response_code: null })).not.toMatch(/Retry|Failed|Timed out/);
+    expect(chips({})).not.toMatch(/Retry|Failed|Timed out/);
+  });
+
+  it('shows the retry number', () => {
+    expect(chips({ request_retry_counter: 2, response_status: 'success' })).toContain('Retry 2');
+  });
+
+  it('says how an attempt that did not succeed ended, with the providers code', () => {
+    expect(chips({ response_status: 'failed', api_response_code: 'rate_limit_exceeded' })).toContain('Failed · rate_limit_exceeded');
+    expect(chips({ response_status: 'timeout' })).toContain('Timed out');
+    expect(chips({ response_status: 'error', api_response_code: null })).toContain('>Error<');
+  });
+});
+
 describe('purposeLabel', () => {
   it('names what each call was for', () => {
     expect(purposeLabel('answer')).toBe('Answer');

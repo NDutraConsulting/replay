@@ -52,6 +52,8 @@ You need `uv` (Python), `npm` (Node), `curl` and `lsof`.
 ./run-site.sh            # backend on :8000, frontend on :5173
 ./run-site.sh restart    # replace whatever is holding those ports
 ./run-site.sh stop       # stop both, from any terminal
+./run-site.sh reset      # fresh build: DELETE all three databases, rebuild them, run the seeders, then start (beta only)
+./run-site.sh delete     # simulate a fresh install: stop, DELETE the three databases and exit (.env is not touched); the next ./run-site.sh is a first run
 ```
 
 Open http://localhost:5173 and sign in as `demo` / `demo` (the seeded account; its password is `DEMO_PASSWORD`) or sign up.

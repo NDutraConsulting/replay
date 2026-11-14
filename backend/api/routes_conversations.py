@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 
 from api.deps import get_current_user
 from config import Settings, get_settings
@@ -7,8 +7,8 @@ from models.common import StopResponse
 from models.conversation import (
     ConversationSummary,
     ConversationView,
+    ForkRequest,
     NewConversationRequest,
-    RewindResponse,
     SendMessageRequest,
     SendMessageResponse,
     StopMessageRequest,
@@ -85,13 +85,6 @@ async def send_message(
     return await controller.send_message(settings, user, conversation_id, request)
 
 
-@router.post("/api/conversations/{conversation_id}/rewind", response_model=RewindResponse)
-async def rewind(
-    conversation_id: str, settings: Settings = Depends(get_settings), user: User = Depends(get_current_user)
-):
-    return await controller.rewind(settings, user, conversation_id)
-
-
 @router.post("/api/conversations/{conversation_id}/stop", response_model=StopResponse)
 async def stop(
     conversation_id: str,
@@ -100,3 +93,28 @@ async def stop(
     user: User = Depends(get_current_user),
 ):
     return await controller.stop(settings, user, conversation_id, request.request_id if request else None)
+
+
+@router.post("/api/conversations/{conversation_id}/lock", response_model=ConversationView)
+async def lock_conversation(
+    conversation_id: str, settings: Settings = Depends(get_settings), user: User = Depends(get_current_user)
+):
+    return await controller.lock(settings, user, conversation_id)
+
+
+@router.post("/api/conversations/{conversation_id}/fork", response_model=ConversationView, status_code=201)
+async def fork_conversation(
+    conversation_id: str,
+    request: ForkRequest | None = None,
+    settings: Settings = Depends(get_settings),
+    user: User = Depends(get_current_user),
+):
+    return await controller.fork(settings, user, conversation_id, request or ForkRequest())
+
+
+@router.delete("/api/conversations/{conversation_id}", status_code=204)
+async def delete_conversation(
+    conversation_id: str, settings: Settings = Depends(get_settings), user: User = Depends(get_current_user)
+):
+    await controller.delete(settings, user, conversation_id)
+    return Response(status_code=204)

@@ -1,5 +1,6 @@
 import asyncio
 import sqlite3
+import threading
 from collections.abc import Callable
 
 from db.kb_move import move_knowledge_base
@@ -32,6 +33,35 @@ def init_db(db_path: str, knowledge_db_path: str, log_db_path: str | None = None
     move_knowledge_base(db_path, knowledge_db_path)
     backfill_document_versions(knowledge_db_path)  # every file has at least its version 1
     return apply_migrations(db_path)
+
+
+_LOG_HEAL = threading.Lock()
+
+
+def _ensure_log_schema(db_path: str) -> None:
+    """Create Log.db's tables if its file was deleted or emptied while the server runs (migrations are otherwise only applied at
+    startup, and SQLite quietly makes a new empty file on the next connection). Safe to call from several requests at once."""
+    with _LOG_HEAL:
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.execute("PRAGMA journal_mode = WAL")
+        finally:
+            conn.close()
+        apply_migrations(db_path, LOG_MIGRATIONS_DIR)
+
+
+async def run_in_log_db[T](db_path: str, fn: Callable[[sqlite3.Connection], T]) -> T:
+    """`run_in_db` for Log.db. If a table is missing, the file was deleted or emptied under the running server (for example by
+    `run.sh --reset-log` run in another terminal): rebuild the schema from the migrations and try once more, instead of failing
+    every log write and read until the next restart. The failed attempt was rolled back, so the retry starts clean. Anything
+    else, or a table the migrations do not create, is raised as it was."""
+    try:
+        return await run_in_db(db_path, fn)
+    except sqlite3.OperationalError as exc:
+        if "no such table" not in str(exc):
+            raise
+    await asyncio.to_thread(_ensure_log_schema, db_path)
+    return await run_in_db(db_path, fn)
 
 
 async def run_in_db[T](db_path: str, fn: Callable[[sqlite3.Connection], T]) -> T:

@@ -10,14 +10,14 @@ The backend now exists in `backend/` (see its README), and **the frontend is mig
 
 **Auth (new):** cookie `session_token` (httponly, SameSite=Lax). `POST /api/account/signup|login|logout`, `GET /api/me`. A `demo` account is seeded. Every other route returns 401 `not_logged_in` without the cookie. The frontend needs a login page.
 
-**Errors:** every failure is `{"error": {"code", "message"}}`; show `message` where the old code showed its error text. Codes to handle specially: `stopped` (409, a stop command won: not an error to show), `stale_cursor`, `replay_complete`, `step_in_progress`, `replay_locked`, `nothing_to_rewind`, `nothing_to_save`, `prompt_removed`, `duplicate_name`, `not_logged_in`/`session_expired`, and the provider errors `llm_unreachable`, `llm_http_error`, `llm_timeout`, `llm_invalid_response`, `llm_empty_response` (502/504).
+**Errors:** every failure is `{"error": {"code", "message"}}`; show `message` where the old code showed its error text. Codes to handle specially: `stopped` (409, a stop command won: not an error to show), `stale_cursor`, `replay_complete`, `step_in_progress`, `replay_locked`, `conversation_locked` (409, a locked conversation takes no more prompts: fork it with `POST /api/conversations/{id}/fork`), `prompt_in_progress` (409, a prompt is still waiting for its reply, so the conversation cannot be locked or forked yet), `nothing_to_rewind`, `nothing_to_save`, `prompt_removed`, `duplicate_name`, `not_logged_in`/`session_expired`, and the provider errors `llm_unreachable`, `llm_http_error`, `llm_timeout`, `llm_invalid_response`, `llm_empty_response` (502/504).
 
 **Field names are snake_case.** The shapes the UI consumes:
 
 | Resource | Shape |
 |---|---|
 | Settings (`GET/PUT /api/settings`) | `{url, models[], connected, api_key_set}`. PUT body `{url, models[], api_key?}`: omit `api_key` to keep it, `""` to remove it. `DELETE /api/settings/api-key` ("Use demo") removes the key and keeps the URL. `POST /api/settings/test` returns `{ok, message}` (HTTP 200 even on failure). |
-| Preferences | `{agent_id, model, chat_sidebar_hidden, replay_prompts_hidden}`; `replay_prompts_hidden` defaults to **true**. PUT changes only the fields sent. |
+| Preferences | `{agent_id, model, chat_sidebar_hidden, replay_prompts_hidden, show_compact_button, show_rewind_button}`; `replay_prompts_hidden` defaults to **true**, `show_compact_button` to **false** and `show_rewind_button` to **true** (the Chat page's Config popup switches, migration 0018). PUT changes only the fields sent. |
 | Conversation | `GET /api/conversations/current` and `POST /api/conversations` -> `{conversation_id, is_sample, messages[]}`; message `{message_id, role, content, status, model, agent, demo, created_at}`. `ignored` messages are never returned. |
 | Send | `POST /api/conversations/{id}/messages` body `{content, model, agent_id}` -> `{messages: [user, assistant]}`. The prompt is saved first, so on a provider error or stop the user message stays (`failed` / `stopped`). |
 | Rewind | `POST .../rewind` -> `{messages, removed_prompt}`; 409 `nothing_to_rewind` when there is no prompt. |
@@ -84,7 +84,7 @@ All routes are under `/api`. JSON in and out. Every resource is scoped to the au
 | PUT | `/api/settings` | `{url, models[], api_key?}`. `api_key` omitted = unchanged, `""` = clear. Same validation as `validateConnection`. |
 | DELETE | `/api/settings/api-key` | The "Use demo" button. |
 | POST | `/api/settings/test` | Sends one short request through the backend. Returns `{ok, message}` (30 s timeout, same messages as today). |
-| GET / PUT | `/api/preferences` | `{agent_id, model, chat_sidebar_hidden, replay_prompts_hidden}`. See D4. |
+| GET / PUT | `/api/preferences` | `{agent_id, model, chat_sidebar_hidden, replay_prompts_hidden, show_compact_button, show_rewind_button}`. See D4. |
 
 ### Chat
 

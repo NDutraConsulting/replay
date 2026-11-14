@@ -145,7 +145,7 @@ describe.skipIf(!BASE)('live: the frontend against the real backend', () => {
     }
   });
 
-  it('chat: shows the sample conversation, sends, rewinds and starts a new chat', async () => {
+  it('chat: shows the sample conversation, sends, rewinds, forks and starts a new chat', async () => {
     await goChat();
     expect(document.querySelectorAll('.message')).toHaveLength(6);
     expect(text(document.querySelector('.drawer-username'))).toMatch(/^live/);
@@ -156,9 +156,21 @@ describe.skipIf(!BASE)('live: the frontend against the real backend', () => {
     expect(messageCopies().at(-2)).toBe('Hello from the live test');
     expect(document.querySelectorAll('.message')).toHaveLength(8);
 
+    // Rewind only steps the view back (after saying it forks); Start fork then copies up to that point into a new conversation
+    const sourceName = text($('conversation-name'));
     $('rewind').click();
-    await eventually(() => expect($('prompt').value).toBe('Hello from the live test'));
+    await eventually(() => expect(document.querySelector('.modal-head h2').textContent).toBe('Rewinding forks this conversation'));
+    document.querySelector('.modal-form').requestSubmit();
+    await eventually(() => expect(document.querySelectorAll('.message')).toHaveLength(6));
+    expect($('send').textContent).toContain('Start fork');
+    expect($('prompt').disabled).toBe(true);
+    $('chat-form').requestSubmit();
+    await eventually(() => expect(document.querySelector('.modal-head h2').textContent).toBe('Start a fork from this point?'));
+    document.querySelector('.modal-form').requestSubmit();
+    await eventually(() => expect($('send').textContent).toContain('Send message'));
     expect(document.querySelectorAll('.message')).toHaveLength(6);
+    expect($('prompt').disabled).toBe(false);
+    expect(text($('fork-note'))).toBe(`Forked from ${sourceName}`);
 
     expect(chips()).toMatchObject({ AGENT: 'General assistant', MODEL: 'model-a', 'KB SUMMARY TOOL': 'Off' }); // the sample conversation has its own settings
   });

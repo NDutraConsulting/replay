@@ -114,10 +114,24 @@ export function apiCallHTML(call, index) {
   const s = call.settings;
   const adjusted = (s?.adjustments ?? []).filter((a) => a !== s.temperature_note && a !== s.logprobs_note); // those reasons are already above
   const extras = `${s?.rule ? `<li><b>Request rules</b> ${esc(s.rule === 'unknown' ? 'none for this model: sent as chosen' : s.rule)}</li>` : ''}${adjusted.map((a) => `<li><b>Adjusted</b> ${esc(a)}</li>`).join('')}`;
-  return `<details class="api-call"><summary><span class="api-index">#${index + 1}</span><span class="api-method">${esc(call.method)}</span><span class="api-url">${esc(call.url)}</span>${status}<span class="api-purpose">${esc(purposeLabel(call.purpose))} · ${esc(call.duration_ms)} ms</span><span class="api-chips"><span class="chip">${esc(settings.temperature.chip)}</span><span class="chip">${esc(settings.reasoning.chip)}</span><span class="chip">${esc(settings.logprobs.chip)}</span></span></summary><div class="api-call-body"><h4>Settings</h4><ul class="api-settings"><li><b>Temperature</b> ${esc(settings.temperature.text)}</li><li><b>Reasoning effort</b> ${esc(settings.reasoning.text)}</li><li><b>Log probabilities</b> ${esc(settings.logprobs.text)}</li>${extras}</ul><h4>Request</h4><pre class="api-pre api-line">${esc(call.method)} ${esc(call.url)}</pre><div class="api-label">Headers</div><pre class="api-pre">${esc(headersText(call.request?.headers))}</pre><div class="api-label">Body</div><pre class="api-pre">${esc(request)}</pre><h4>Response</h4>${res ? `<div class="api-label">Status ${esc(res.status)}</div><pre class="api-pre">${esc(prettyBody(res.body))}</pre>${res.truncated ? '<p class="small">This response was longer than the log keeps, so it is cut here. The answer itself was used whole.</p>' : ''}` : `<p class="api-error">${esc(call.error || 'The API did not answer.')}</p>`}</div></details>`;
+  return `<details class="api-call"><summary><span class="api-index">#${index + 1}</span><span class="api-method">${esc(call.method)}</span><span class="api-url">${esc(call.url)}</span>${status}<span class="api-purpose">${esc(purposeLabel(call.purpose))} · ${esc(call.duration_ms)} ms</span><span class="api-chips"><span class="chip">${esc(settings.temperature.chip)}</span><span class="chip">${esc(settings.reasoning.chip)}</span><span class="chip">${esc(settings.logprobs.chip)}</span>${retryChipsHTML(call)}</span></summary><div class="api-call-body"><h4>Settings</h4><ul class="api-settings"><li><b>Temperature</b> ${esc(settings.temperature.text)}</li><li><b>Reasoning effort</b> ${esc(settings.reasoning.text)}</li><li><b>Log probabilities</b> ${esc(settings.logprobs.text)}</li>${extras}</ul><h4>Request</h4><pre class="api-pre api-line">${esc(call.method)} ${esc(call.url)}</pre><div class="api-label">Headers</div><pre class="api-pre">${esc(headersText(call.request?.headers))}</pre><div class="api-label">Body</div><pre class="api-pre">${esc(request)}</pre><h4>Response</h4>${res ? `<div class="api-label">Status ${esc(res.status)}</div><pre class="api-pre">${esc(prettyBody(res.body))}</pre>${res.truncated ? '<p class="small">This response was longer than the log keeps, so it is cut here. The answer itself was used whole.</p>' : ''}` : `<p class="api-error">${esc(call.error || 'The API did not answer.')}</p>`}</div></details>`;
 }
 
 /** The whole log: every prompt with its calls, or the reason there is nothing to show. */
+/** A turn copied into a fork says which conversation made its calls (the name is null once that conversation is deleted). */
+export const sourceLineHTML = (turn) =>
+  turn.source_conversation_id
+    ? `<p class="small api-source">${turn.source_conversation_name ? `From ${esc(turn.source_conversation_name)}: this response was produced in the source conversation.` : 'From a deleted conversation.'}</p>`
+    : '';
+
+/** Chat calls only: a chip when the call was a retry, and one saying how a call that did not succeed ended. */
+export function retryChipsHTML(call) {
+  const retry = call.request_retry_counter > 0 ? `<span class="chip">Retry ${esc(call.request_retry_counter)}</span>` : '';
+  const how = { failed: 'Failed', timeout: 'Timed out', error: 'Error' }[call.response_status];
+  const outcome = how ? `<span class="chip">${how}${call.api_response_code ? ` · ${esc(call.api_response_code)}` : ''}</span>` : '';
+  return retry + outcome;
+}
+
 export function apiLogHTML(log, subject = 'replay') {
   const Subject = subject[0].toUpperCase() + subject.slice(1);
   if (!log.recorded) {
@@ -132,7 +146,7 @@ export function apiLogHTML(log, subject = 'replay') {
     .map((t) => {
       const first = log.turns.indexOf(t);
       const before = log.turns.slice(0, first).reduce((n, x) => n + x.calls.length, 0);
-      return `<section class="api-turn"><h3>Prompt ${String(t.turn_index + 1).padStart(2, '0')} <span class="small">${t.calls.length} ${t.calls.length === 1 ? 'call' : 'calls'}</span></h3><p class="api-prompt">${esc(t.prompt)}</p>${t.calls.map((c, i) => apiCallHTML(c, before + i)).join('')}</section>`;
+      return `<section class="api-turn"><h3>Prompt ${String(t.turn_index + 1).padStart(2, '0')} <span class="small">${t.calls.length} ${t.calls.length === 1 ? 'call' : 'calls'}</span></h3>${sourceLineHTML(t)}<p class="api-prompt">${esc(t.prompt)}</p>${t.calls.map((c, i) => apiCallHTML(c, before + i)).join('')}</section>`;
     })
     .join('');
   const setTo = log.temperature === undefined ? '' : `<div class="api-settings-line"><span class="chip"><b>${Subject} temperature</b>${esc(temperatureLabel(log.temperature))}</span><span class="chip"><b>${Subject} reasoning</b>${esc(reasoningLabel(log.reasoning_level))}</span><span class="chip"><b>${Subject} log probs</b>${log.logprobs ? 'On' : 'Off'}</span></div>`;

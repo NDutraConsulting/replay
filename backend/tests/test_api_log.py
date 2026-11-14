@@ -31,11 +31,19 @@ def columns(path, table):
 def test_init_creates_log_db_with_its_own_migrations(tmp_path):
     app, kb, log = (str(tmp_path / n) for n in ("app.db", "kb.db", "Log.db"))
     init_db(app, kb, log)
-    assert {"api_calls", "api_log_turns", "chat_api_calls", "chat_api_requests", "schema_migrations"} <= tables(log)
+    assert {
+        "api_calls",
+        "api_log_turns",
+        "chat_api_calls",
+        "chat_api_conversation_requests",
+        "conversation_fork_log",
+        "schema_migrations",
+    } <= tables(log)
+    assert "chat_api_requests" not in tables(log)  # the old chat log table was discarded by migration 0005
     assert "api_calls" not in tables(app) and "api_calls" not in tables(kb)  # not in the other files
     assert init_db(app, kb, log) == []  # a second start applies nothing new
     with sqlite3.connect(log) as conn:
-        assert [r[0] for r in conn.execute("SELECT version FROM schema_migrations")] == [1, 2, 3, 4]
+        assert [r[0] for r in conn.execute("SELECT version FROM schema_migrations")] == [1, 2, 3, 4, 5]
 
 
 def test_the_log_is_not_stored_in_app_db(db, test_settings):

@@ -1,4 +1,4 @@
-"""Conversations and messages: creating (with a fixed configuration), sending, rewinding, stop, rename and Compact.
+"""Conversations and messages: creating (with a fixed configuration), sending, stop, rename, lock, fork and Compact.
 
 A conversation's agent, model, reasoning level and KB-summary-tool switch are chosen once, in the New conversation
 popup, and are fixed: every message runs with them (the client does not send them), so a set of conversations can be
@@ -23,9 +23,9 @@ from models.conversation import (
     Conversation,
     ConversationSummary,
     ConversationView,
+    ForkRequest,
     Message,
     NewConversationRequest,
-    RewindResponse,
     SendMessageRequest,
     SendMessageResponse,
     UpdateConversationRequest,
@@ -34,6 +34,7 @@ from models.decision import DecisionStep
 from models.replay_run import ApiCall, ApiLog, ApiLogTurn
 from models.user import User
 from repositories import chat_api_log_repository, conversation_repository, kb_choice_repository, message_repository
+from repositories.conversation_errors import ConversationLocked, PromptInProgress
 from services import (
     demo_response_service,
     history_service,
@@ -42,8 +43,19 @@ from services import (
     settings_service,
     summary_service,
 )
+from services.OpenAI_API_Model_rules import resolve_params
 
 logger = logging.getLogger(__name__)
+
+
+def _locked() -> AppError:
+    return conflict(
+        "conversation_locked", "This conversation is locked. Open it to fork it and keep going from a copy."
+    )
+
+
+def _prompt_in_progress() -> AppError:
+    return conflict("prompt_in_progress", "A prompt is still waiting for its reply. Wait for it, or stop it, first.")
 
 
 def _stopped() -> AppError:
@@ -114,6 +126,14 @@ async def _with_traces(settings: Settings, user: User, conversation_id: str, mes
 async def _view(settings: Settings, user: User, conversation: Conversation) -> ConversationView:
     messages = await message_repository.list_visible(settings.DATABASE_PATH, conversation.conversation_id)
     messages = await _with_traces(settings, user, conversation.conversation_id, messages)
+    forked_from = (
+        await conversation_repository.forks_for(settings.DATABASE_PATH, user.user_id, [conversation.conversation_id])
+    ).get(conversation.conversation_id)
+    parent = (
+        await conversation_repository.get_owned(settings.DATABASE_PATH, user.user_id, forked_from)
+        if forked_from
+        else None
+    )
     return ConversationView(
         conversation_id=conversation.conversation_id,
         is_sample=conversation.is_sample,
@@ -126,6 +146,10 @@ async def _view(settings: Settings, user: User, conversation: Conversation) -> C
         brief_replies=conversation.brief_replies,
         brief_instruction=history_service.BRIEF_REPLY_INSTRUCTION,
         source_conversation_id=conversation.source_conversation_id,
+        locked=conversation.locked_at is not None,
+        lock_reason=conversation.lock_reason,
+        forked_from_conversation_id=forked_from,
+        forked_from_name=parent.name if parent else None,
         created_at=conversation.created_at,
         max_user_prompts=settings.MAX_USER_PROMPTS,
         messages=messages,
@@ -159,6 +183,9 @@ async def list_conversations(settings: Settings, user: User) -> list[Conversatio
     """Every chat the user started in the chat interface, most recently used first. Replay runs and saved replays are
     kept in their own tables and never appear here."""
     rows = await conversation_repository.list_with_prompt_counts(settings.DATABASE_PATH, user.user_id)
+    forks = await conversation_repository.forks_for(  # one query for the whole list
+        settings.DATABASE_PATH, user.user_id, [c.conversation_id for c, _ in rows]
+    )
     return [
         ConversationSummary(
             conversation_id=c.conversation_id,
@@ -170,6 +197,8 @@ async def list_conversations(settings: Settings, user: User) -> list[Conversatio
             kb_summary_tool=c.kb_summary_tool,
             brief_replies=c.brief_replies,
             source_conversation_id=c.source_conversation_id,
+            locked=c.locked_at is not None,
+            forked_from_conversation_id=forks.get(c.conversation_id),
             prompt_count=count,
             created_at=c.created_at,
             updated_at=c.updated_at,
@@ -188,6 +217,11 @@ async def open_conversation(settings: Settings, user: User, conversation_id: str
 async def new_conversation(settings: Settings, user: User, request: NewConversationRequest) -> ConversationView:
     agent = await settings_service.require_agent(settings, request.agent_id)
     await settings_service.require_model(settings, user, request.model)
+    # A conversation's settings are fixed once it starts, so a model and reasoning level the model is documented not to accept
+    # would make a chat that can never send (every message would answer 400). Refuse that here, with the same explanation
+    # the send would give, while the New conversation popup is still open.
+    provider = await settings_service.get_provider(settings, user, request.model)
+    resolve_params(provider.model, summary_service.effort(request.reasoning_level), request.temperature)
     conversation = await conversation_repository.create(
         settings.DATABASE_PATH,
         user.user_id,
@@ -270,12 +304,14 @@ async def _attach_document(
         )
 
 
-async def _log_calls(settings: Settings, user: User, conversation_id: str, request_id: str, calls: list[dict]) -> None:
-    """Keep the raw REST calls made for this prompt (Log.db), so the chat can show what was sent. A missing log must never
-    fail a prompt, so a problem here is only logged."""
+async def _log_calls(
+    settings: Settings, user: User, conversation_id: str, request_id: str, message_id: str, calls: list[dict]
+) -> None:
+    """Keep the raw REST calls made for this prompt (Log.db, append-only), so the chat can show what was sent. A missing
+    log must never fail a prompt, so a problem here is only logged."""
     try:
         await chat_api_log_repository.record_request(
-            settings.LOG_DB_PATH, user.user_id, conversation_id, request_id, calls
+            settings.LOG_DB_PATH, user.user_id, conversation_id, request_id, message_id, calls
         )
     except Exception:
         logger.exception("Could not log the API calls for %s", request_id)
@@ -283,19 +319,33 @@ async def _log_calls(settings: Settings, user: User, conversation_id: str, reque
 
 async def get_api_log(settings: Settings, user: User, conversation_id: str) -> ApiLog:
     """What the Chat page sent to the model provider, prompt by prompt: the raw REST calls (the API key is never in
-    them). Only prompts still in the conversation are listed (a rewound prompt's calls are gone with it). A conversation
-    from before the log existed has `recorded` false."""
+    them), found through the conversation's own rows in the log. Only prompts still in the conversation are listed.
+    A fork lists the calls of the prompts it copied; those turns say which conversation made them. A conversation
+    from before the log existed (or before it was reset) has `recorded` false."""
     conversation = await _owned(settings, user, conversation_id)
     messages = await message_repository.list_visible(settings.DATABASE_PATH, conversation_id)
     logged = await chat_api_log_repository.for_conversation(settings.LOG_DB_PATH, user.user_id, conversation_id)
-    turns = [
-        ApiLogTurn(
-            turn_index=index,
-            prompt=m.content,
-            calls=[ApiCall(**call) for call in logged.get(m.request_id or "", [])],
+    names: dict[str, str | None] = {}
+
+    async def name_of(other_id: str) -> str | None:
+        if other_id not in names:
+            other = await conversation_repository.get_owned(settings.DATABASE_PATH, user.user_id, other_id)
+            names[other_id] = other.name if other else None
+        return names[other_id]
+
+    turns = []
+    for index, m in enumerate(m for m in messages if m.role == "user" and m.message_type == "chat"):
+        calls = logged.get(m.message_id, [])
+        made_in = calls[0]["conversation_id"] if calls else conversation_id
+        turns.append(
+            ApiLogTurn(
+                turn_index=index,
+                prompt=m.content,
+                calls=[ApiCall(**{k: v for k, v in call.items() if k != "conversation_id"}) for call in calls],
+                source_conversation_id=made_in if made_in != conversation_id else None,
+                source_conversation_name=await name_of(made_in) if made_in != conversation_id else None,
+            )
         )
-        for index, m in enumerate(m for m in messages if m.role == "user" and m.message_type == "chat")
-    ]
     return ApiLog(
         id=conversation.conversation_id,
         recorded=bool(logged),
@@ -329,9 +379,12 @@ async def send_message(
     # The prompt is saved first, so it survives a failure, a stop or a crash. Every send has a request id (the
     # client's, or one made here) that names it in the stop command and in the recorded knowledge-base choices.
     request_id = request.request_id or uuid.uuid4().hex
-    user_message, already_stopped = await message_repository.begin_turn(
-        settings.DATABASE_PATH, conversation_id, content, request_id
-    )
+    try:
+        user_message, already_stopped = await message_repository.begin_turn(
+            settings.DATABASE_PATH, conversation_id, content, request_id
+        )
+    except ConversationLocked:
+        raise _locked() from None
     if already_stopped:
         raise _stopped()  # the stop command arrived first: the prompt is saved, the model is never called
     calls: list[dict] = []
@@ -400,7 +453,7 @@ async def send_message(
                 raise
 
     finally:
-        await _log_calls(settings, user, conversation_id, request_id, calls)
+        await _log_calls(settings, user, conversation_id, request_id, user_message.message_id, calls)
 
     outcome, user_stored, assistant = await message_repository.finish_reply(
         settings.DATABASE_PATH,
@@ -418,28 +471,6 @@ async def send_message(
     if outcome == "gone":
         raise conflict("prompt_removed", "That prompt was removed before the reply arrived.")
     raise _stopped()
-
-
-async def _forget_calls(settings: Settings, user: User, request_ids: list[str]) -> None:
-    try:
-        await chat_api_log_repository.delete_requests(settings.LOG_DB_PATH, user.user_id, request_ids)
-    except Exception:
-        logger.exception("Could not forget the API calls of rewound prompts")
-
-
-async def rewind(settings: Settings, user: User, conversation_id: str) -> RewindResponse:
-    conversation = await _owned(settings, user, conversation_id)
-    removed = await message_repository.rewind(settings.DATABASE_PATH, conversation_id)
-    if removed is None:
-        raise conflict("nothing_to_rewind", "There is no prompt to rewind.")
-    prompt, removed_request_ids = removed
-    await _forget_calls(settings, user, removed_request_ids)
-    # the rewound prompts' knowledge-base choices go with them (they must not steer the next answer)
-    await kb_choice_repository.delete_chat(
-        settings.KNOWLEDGE_DB_PATH, user.user_id, conversation_id, removed_request_ids
-    )
-    view = await _view(settings, user, conversation)
-    return RewindResponse(messages=view.messages, removed_prompt=prompt)
 
 
 async def stop(settings: Settings, user: User, conversation_id: str, request_id: str | None = None) -> StopResponse:
@@ -485,3 +516,77 @@ async def compact(settings: Settings, user: User, conversation_id: str) -> Conve
         },
     )
     return await _view(settings, user, started)
+
+
+async def lock(settings: Settings, user: User, conversation_id: str) -> ConversationView:
+    """Lock a conversation: it takes no more prompts, but stays available for replay. Locking a locked conversation
+    changes nothing."""
+    conversation = await _owned(settings, user, conversation_id)
+    try:
+        await conversation_repository.lock(settings.DATABASE_PATH, conversation.conversation_id, "user")
+    except PromptInProgress:
+        raise _prompt_in_progress() from None
+    return await _view(settings, user, await _owned(settings, user, conversation_id))
+
+
+async def lock_for_replay(settings: Settings, user: User, conversation_id: str) -> None:
+    """A replay of this conversation is starting: lock it so the source can no longer change under its replays.
+    Locking a locked conversation changes nothing."""
+    await conversation_repository.lock(settings.DATABASE_PATH, conversation_id, "replay")
+
+
+async def fork(settings: Settings, user: User, conversation_id: str, request: ForkRequest) -> ConversationView:
+    """Copy a conversation (up to a message, or all of it) into a NEW conversation. Nothing is sent to a model.
+
+    The copy spans three database files, so it is not one transaction: the messages and the fork's row in
+    `conversation_forks` (app.db, one transaction) first, then the knowledge base choices (knowledgebase.db), then, last,
+    the audit copy of the fork and the API-log rows (Log.db, append-only, written in a single transaction). If a later
+    step fails, the earlier ones that can be undone are undone (the new conversation, its fork row and its choices are
+    deleted), so a half-made fork never stays."""
+    source = await _owned(settings, user, conversation_id)
+    through_sequence: int | None = None
+    if request.through_message_id is not None:
+        visible = await message_repository.list_visible(settings.DATABASE_PATH, conversation_id)
+        through = next((m for m in visible if m.message_id == request.through_message_id), None)
+        if through is None:
+            raise not_found("Message")
+        through_sequence = through.sequence_number
+    try:
+        fork_, message_ids, fork_id = await conversation_repository.fork(
+            settings.DATABASE_PATH,
+            user.user_id,
+            source,
+            f"{source.name} (fork)"[:MAX_NAME_LENGTH],
+            through_sequence,
+        )
+    except PromptInProgress:
+        raise _prompt_in_progress() from None
+    try:
+        copied = await message_repository.list_visible(settings.DATABASE_PATH, fork_.conversation_id)
+        await kb_choice_repository.copy_chat(
+            settings.KNOWLEDGE_DB_PATH,
+            user.user_id,
+            source.conversation_id,
+            fork_.conversation_id,
+            [m.request_id for m in copied if m.role == "user" and m.request_id],
+        )
+        await chat_api_log_repository.copy_for_fork(
+            settings.LOG_DB_PATH, user.user_id, source.conversation_id, fork_.conversation_id, message_ids, fork_id
+        )
+    except BaseException:
+        await kb_choice_repository.delete_scope(
+            settings.KNOWLEDGE_DB_PATH, user.user_id, "chat", [fork_.conversation_id]
+        )
+        await conversation_repository.undo_fork(settings.DATABASE_PATH, user.user_id, fork_.conversation_id)
+        raise
+    return await _view(settings, user, fork_)
+
+
+async def delete(settings: Settings, user: User, conversation_id: str) -> None:
+    """Delete a conversation. This cannot be undone. Its messages and knowledge base choices go with it; replays started from
+    it keep their prompts and lose the link; fork rows and the append-only API log (Log.db) are left as they are, so a
+    fork still shows where it came from and still shows the calls that produced the answers it copied. A locked
+    conversation can be deleted too."""
+    if not await conversation_repository.delete_one(settings.DATABASE_PATH, user.user_id, conversation_id):
+        raise not_found("Conversation")
+    await kb_choice_repository.delete_scope(settings.KNOWLEDGE_DB_PATH, user.user_id, "chat", [conversation_id])

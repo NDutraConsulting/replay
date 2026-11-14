@@ -17,7 +17,7 @@ export function openChatPicker(chats, agents, currentId, onOpen, { reopenCurrent
   const row = (c) => {
     const agent = agents.find((a) => a.id === c.agent_id)?.name || c.agent_id;
     const turns = `${c.prompt_count} ${c.prompt_count === 1 ? 'prompt' : 'prompts'}`;
-    return `<label class="chat-option"><input type="radio" name="chat" value="${esc(c.conversation_id)}" ${c.conversation_id === currentId ? 'checked' : ''}><span class="chat-option-body"><span class="chat-option-name">${esc(c.name)}${c.conversation_id === currentId ? ' <span class="badge">Open now</span>' : ''}</span><span class="chat-option-meta">${esc(agent)} · ${esc(modelLabel(c.model))} · ${turns} · ${esc(when(c.updated_at))}</span></span></label>`;
+    return `<label class="chat-option"><input type="radio" name="chat" value="${esc(c.conversation_id)}" ${c.conversation_id === currentId ? 'checked' : ''}><span class="chat-option-body"><span class="chat-option-name">${esc(c.name)}${c.conversation_id === currentId ? ' <span class="badge">Open now</span>' : ''}${c.locked ? ' <span class="badge lock-badge">Locked</span>' : ''}${c.forked_from_conversation_id ? ` <span class="badge">Fork of ${esc(chats.find((o) => o.conversation_id === c.forked_from_conversation_id)?.name ?? 'a deleted chat')}</span>` : ''}</span><span class="chat-option-meta">${esc(agent)} · ${esc(modelLabel(c.model))} · ${turns} · ${esc(when(c.updated_at))}</span></span></label>`;
   };
   const stepsOf = (n) => `<p class="modal-step">Step ${n} of 2</p>`;
   const listHTML = chats.length

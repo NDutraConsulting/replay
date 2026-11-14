@@ -3,8 +3,8 @@ from models.common import StopResponse
 from models.conversation import (
     ConversationSummary,
     ConversationView,
+    ForkRequest,
     NewConversationRequest,
-    RewindResponse,
     SendMessageRequest,
     SendMessageResponse,
     UpdateConversationRequest,
@@ -50,13 +50,21 @@ async def send_message(
     return await service.send_message(settings, user, conversation_id, request)
 
 
-async def rewind(settings: Settings, user: User, conversation_id: str) -> RewindResponse:
-    return await service.rewind(settings, user, conversation_id)
-
-
 async def stop(settings: Settings, user: User, conversation_id: str, request_id: str | None = None) -> StopResponse:
     return await service.stop(settings, user, conversation_id, request_id)
 
 
 async def get_api_log(settings: Settings, user: User, conversation_id: str) -> ApiLog:
     return await service.get_api_log(settings, user, conversation_id)
+
+
+async def lock(settings: Settings, user: User, conversation_id: str) -> ConversationView:
+    return await service.lock(settings, user, conversation_id)
+
+
+async def fork(settings: Settings, user: User, conversation_id: str, request: ForkRequest) -> ConversationView:
+    return await service.fork(settings, user, conversation_id, request)
+
+
+async def delete(settings: Settings, user: User, conversation_id: str) -> None:
+    await service.delete(settings, user, conversation_id)

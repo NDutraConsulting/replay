@@ -112,12 +112,15 @@ describe('app bootstrap and preferences', () => {
       models: ['Fast::m1', 'Fast::m2'], connected: true,
       connections: [{ id: 'c1', label: 'Fast', url: 'https://x.test/v1', models: ['m1', 'm2'], apiKeySet: true, connected: true, source: 'account', readOnly: false }],
     }); // fmt: skip
-    expect(app.preferences).toEqual({ agentId: 'assistant', model: null, chatSidebarHidden: false, replayPromptsHidden: true });
+    expect(app.preferences).toEqual({ agentId: 'assistant', model: null, chatSidebarHidden: false, replayPromptsHidden: true, showCompactButton: false, showRewindButton: true });
 
     const saved = await savePreferences({ agentId: 'code', replayPromptsHidden: false });
     expect(mock.lastBody('PUT /api/preferences')).toEqual({ agent_id: 'code', replay_prompts_hidden: false });
     expect(saved.agentId).toBe('code');
     expect(state.preferences.agent_id).toBe('code');
+    await savePreferences({ showCompactButton: true, showRewindButton: false });
+    expect(mock.lastBody('PUT /api/preferences')).toEqual({ show_compact_button: true, show_rewind_button: false });
+    expect(state.preferences).toMatchObject({ show_compact_button: true, show_rewind_button: false });
 
     expect(resolveModel(['m1', 'm2'], 'm2')).toBe('m2');
     expect(resolveModel(['m1', 'm2'], 'gone')).toBe('m1');

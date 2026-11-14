@@ -15,6 +15,9 @@ from services import auth_service
 
 NOW = datetime.now(UTC).isoformat()
 KB_TABLES = {"kb_categories", "kb_subcategories", "kb_documents", "kb_seeded"}
+LATEST = max(int(path.name[:4]) for path in MIGRATIONS_DIR.glob("*.sql"))
+"""The newest app.db migration. The tests below say "everything after 0004" or "all of them" in terms of this, so adding a
+migration never breaks them."""
 
 
 def tables(path):
@@ -68,9 +71,9 @@ def legacy(tmp_path):
 def test_existing_knowledge_base_rows_are_moved_and_the_old_tables_dropped(legacy):
     app_db, kb_db = legacy
     assert KB_TABLES <= tables(app_db)
-    assert init_db(app_db, kb_db) == [4, 5, 6, 7]  # app.db: 0004 and everything after it were pending
+    assert init_db(app_db, kb_db) == list(range(4, LATEST + 1))  # app.db: 0004 and everything after it were pending
     assert not KB_TABLES & tables(app_db)
-    assert versions(app_db) == [1, 2, 3, 4, 5, 6, 7] and versions(kb_db) == [1, 2]
+    assert versions(app_db) == list(range(1, LATEST + 1)) and versions(kb_db) == [1, 2]
     assert [count(kb_db, t) for t in ("kb_categories", "kb_subcategories", "kb_documents", "kb_seeded")] == [1, 1, 1, 1]
     conn = sqlite3.connect(kb_db)
     assert conn.execute("SELECT content, status FROM kb_documents WHERE document_id = 'd-old'").fetchone() == (
@@ -145,7 +148,7 @@ def test_a_row_that_cannot_be_copied_stops_startup_before_anything_is_dropped(le
 
 def test_a_fresh_install_has_nothing_to_move(tmp_path):
     app_db, kb_db = str(tmp_path / "app.db"), str(tmp_path / "kb.db")
-    assert init_db(app_db, kb_db) == [1, 2, 3, 4, 5, 6, 7]
+    assert init_db(app_db, kb_db) == list(range(1, LATEST + 1))
     assert not KB_TABLES & tables(app_db)
     assert KB_TABLES <= tables(kb_db)
     assert move_knowledge_base(str(tmp_path / "missing.db"), kb_db) == {}

@@ -33,7 +33,7 @@ than `src/shared/http.js` calls `fetch`.
 
 ## Run
 
-To start both servers at once: `../run-site.sh` (backend on :8000, frontend on :5173; `restart` replaces whatever holds the ports, `stop` stops both from any terminal, Ctrl-C stops both too).
+To start both servers at once: `../run-site.sh` (backend on :8000, frontend on :5173; `restart` replaces whatever holds the ports, `stop` stops both from any terminal, `reset` deletes all three databases, rebuilds them, runs the seeders and starts the site for a fresh build, `delete` stops the site and deletes the three databases without starting anything (never touches `backend/.env`), so the next `../run-site.sh` behaves like a first run, Ctrl-C stops both too).
 
 Or by hand: the backend must be running (`cd ../backend && ./run.sh`, http://localhost:8000). Then:
 

@@ -140,21 +140,6 @@ async def last_replay_path(db_path: str, user_id: str, run_id: str, slot: str) -
     return _latest_with_a_selection(by_ref, [str(t) for t in turns])
 
 
-async def delete_chat(db_path: str, user_id: str, conversation_id: str, request_ids: list[str]) -> None:
-    """Forget the choices of prompts that were rewound away."""
-    if not request_ids:
-        return
-
-    def _run(conn: sqlite3.Connection) -> None:
-        marks = ", ".join("?" * len(request_ids))
-        conn.execute(
-            f"DELETE FROM knowledge_base_choice WHERE user_id = ? AND scope = 'chat' AND scope_id = ? AND ref IN ({marks})",
-            (user_id, conversation_id, *request_ids),
-        )
-
-    await run_in_db(db_path, _run)
-
-
 async def replay_runs_using(db_path: str, user_id: str, version_ids: list[str]) -> list[str]:
     """The user's replay runs that have an answer given with any of these file versions."""
     if not version_ids:
@@ -183,5 +168,46 @@ async def delete_scope(db_path: str, user_id: str, scope: str, scope_ids: list[s
             f"DELETE FROM knowledge_base_choice WHERE user_id = ? AND scope = ? AND scope_id IN ({marks})",
             (user_id, scope, *scope_ids),
         )
+
+    await run_in_db(db_path, _run)
+
+
+async def copy_chat(
+    db_path: str, user_id: str, from_conversation_id: str, to_conversation_id: str, request_ids: list[str]
+) -> None:
+    """A conversation was forked: give the fork its own copy of the choices recorded for the copied prompts (same request
+    ids, new conversation id), so the decision trace of each copied answer shows in the fork. One transaction."""
+    if not request_ids:
+        return
+
+    def _run(conn: sqlite3.Connection) -> None:
+        marks = ", ".join("?" * len(request_ids))
+        rows = conn.execute(
+            f"SELECT * FROM knowledge_base_choice WHERE user_id = ? AND scope = 'chat' AND scope_id = ? AND ref IN ({marks})",
+            (user_id, from_conversation_id, *request_ids),
+        ).fetchall()
+        for r in rows:
+            conn.execute(
+                "INSERT INTO knowledge_base_choice (choice_id, user_id, agent_id, scope, scope_id, ref, step_number, level, "
+                "model, options_json, chosen_id, chosen_name, reason, outcome, created_at, document_version_id) "
+                "VALUES (?, ?, ?, 'chat', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    str(uuid.uuid4()),
+                    r["user_id"],
+                    r["agent_id"],
+                    to_conversation_id,
+                    r["ref"],
+                    r["step_number"],
+                    r["level"],
+                    r["model"],
+                    r["options_json"],
+                    r["chosen_id"],
+                    r["chosen_name"],
+                    r["reason"],
+                    r["outcome"],
+                    r["created_at"],
+                    r["document_version_id"],
+                ),
+            )
 
     await run_in_db(db_path, _run)

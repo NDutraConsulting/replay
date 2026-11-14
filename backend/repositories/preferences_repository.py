@@ -16,6 +16,8 @@ async def get(db_path: str, user_id: str) -> UserPreferences | None:
             model=row["model"],
             chat_sidebar_hidden=bool(row["chat_sidebar_hidden"]),
             replay_prompts_hidden=bool(row["replay_prompts_hidden"]),
+            show_compact_button=bool(row["show_compact_button"]),
+            show_rewind_button=bool(row["show_rewind_button"]),
             updated_at=row["updated_at"],
         )
 
@@ -27,6 +29,8 @@ _COLUMNS = {
     "model": lambda v: v,
     "chat_sidebar_hidden": int,
     "replay_prompts_hidden": int,
+    "show_compact_button": int,
+    "show_rewind_button": int,
 }
 
 

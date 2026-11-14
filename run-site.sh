@@ -2,9 +2,18 @@
 # Launch the whole site: the FastAPI backend (backend/run.sh) and the Vite frontend (replay-chat-vite).
 # The frontend proxies /api to the backend, so open the frontend URL only.
 #
-# Usage: ./run-site.sh [stop | restart] [--reset | --reset-app | --reset-knowledge]
+# Usage: ./run-site.sh [stop | restart | reset | delete] [--reset | --reset-app | --reset-knowledge]
 #   stop               stop the backend and the frontend (from any terminal) and exit; starts nothing
 #   restart            stop whatever is already listening on the backend and frontend ports first, then start
+#   reset              a fresh, clean build: stop the site, delete app.db, knowledgebase.db AND Log.db (and their WAL/journal
+#                      files), rebuild them from the migrations, run the seeders (agents, the demo account and its knowledge
+#                      bases), then start the site. EVERYTHING IS LOST, the append-only log included. For beta builds.
+#                      It cannot be combined with stop or the --reset* flags (it already clears everything).
+#   delete             simulate a fresh install: stop the site, delete app.db, knowledgebase.db AND Log.db (and their WAL/journal
+#                      files), then exit; starts nothing. Nothing else is touched: backend/.env (it is never created, changed or
+#                      removed), the Python packages and node_modules stay. The next plain ./run-site.sh then behaves like a first
+#                      run: it creates the databases, seeds the agents and the demo account, and the knowledge bases fill in on
+#                      first use. (reset = delete + rebuild + seed + start.) It cannot be combined with other options.
 #   --reset*           passed to backend/run.sh. The databases are persistent and are NEVER wiped unless you ask.
 # Env:   BACKEND_PORT (default 8000), FRONTEND_PORT (default 5173)
 # Stop both with Ctrl-C.
@@ -15,11 +24,15 @@ BACKEND_PORT="${BACKEND_PORT:-8000}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 RESTART=0
 STOP=0
+RESET_ALL=0
+DELETE=0
 BACKEND_ARGS=()
 for arg in "$@"; do
   case "$arg" in
     stop) STOP=1 ;;
     restart) RESTART=1 ;;
+    reset) RESET_ALL=1; RESTART=1 ;; # a reset always stops the site first
+    delete) DELETE=1 ;;
     --reset | --reset-app | --reset-knowledge) BACKEND_ARGS+=("$arg") ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
@@ -30,8 +43,20 @@ if [[ "$STOP" == 1 && ( "$RESTART" == 1 || ${#BACKEND_ARGS[@]} -gt 0 ) ]]; then
   exit 2
 fi
 
+if [[ "$DELETE" == 1 && ( "$STOP" == 1 || "$RESTART" == 1 || "$RESET_ALL" == 1 || ${#BACKEND_ARGS[@]} -gt 0 ) ]]; then
+  echo "'delete' cannot be combined with other options." >&2
+  exit 2
+fi
+
+if [[ "$RESET_ALL" == 1 && ( "$STOP" == 1 || ${#BACKEND_ARGS[@]} -gt 0 ) ]]; then
+  echo "'reset' cannot be combined with 'stop' or the --reset* flags (it already clears everything)." >&2
+  exit 2
+fi
+
 command -v lsof >/dev/null || { echo "Missing required tool: lsof" >&2; exit 1; }
-if [[ "$STOP" != 1 ]]; then
+if [[ "$DELETE" == 1 ]]; then
+  command -v uv >/dev/null || { echo "Missing required tool: uv" >&2; exit 1; }  # it runs the script that deletes the files
+elif [[ "$STOP" != 1 ]]; then
   for tool in uv npm curl; do
     command -v "$tool" >/dev/null || { echo "Missing required tool: $tool" >&2; exit 1; }
   done
@@ -49,20 +74,34 @@ stop_port() {
   kill -9 $(listening "$1") 2>/dev/null || true
 }
 
-if [[ "$STOP" == 1 ]]; then
-  # the launcher itself (if it runs in another terminal) goes first so it cannot restart anything or print errors
+# Stop the launcher (if it runs in another terminal) and whatever listens on the two ports. Returns 1 when nothing was running.
+stop_site() {
+  # the launcher itself goes first so it cannot restart anything or print errors
+  local launchers
   launchers="$(pgrep -f "$(basename "$0")" | grep -vx "$$" || true)"
   [[ -n "$launchers" ]] && kill -TERM $launchers 2>/dev/null || true
   [[ -n "$launchers" ]] && sleep 1
-  if [[ -z "$(listening "$BACKEND_PORT")$(listening "$FRONTEND_PORT")" ]]; then
-    echo "Nothing is running on ports $BACKEND_PORT and $FRONTEND_PORT."
-  else
-    stop_port "$BACKEND_PORT"
-    stop_port "$FRONTEND_PORT"
-    echo "Stopped."
-  fi
+  [[ -z "$(listening "$BACKEND_PORT")$(listening "$FRONTEND_PORT")" ]] && return 1
+  stop_port "$BACKEND_PORT"
+  stop_port "$FRONTEND_PORT"
+  return 0
+}
+
+if [[ "$STOP" == 1 ]]; then
+  if stop_site; then echo "Stopped."; else echo "Nothing is running on ports $BACKEND_PORT and $FRONTEND_PORT."; fi
   exit 0
 fi
+
+if [[ "$DELETE" == 1 ]]; then
+  # a fresh-install simulation: the databases go, nothing else does (and backend/.env is neither created nor changed)
+  stop_site && echo "Stopped the site."
+  echo "Deleting app.db, knowledgebase.db and Log.db (and any WAL/journal files)..."
+  (cd backend && uv run python scripts/reset_db.py --yes)
+  echo "Done. backend/.env, the Python packages and node_modules were left alone."
+  echo "Run ./run-site.sh to start as on a fresh install."
+  exit 0
+fi
+
 if [[ "$RESTART" == 1 ]]; then
   stop_port "$BACKEND_PORT"
   stop_port "$FRONTEND_PORT"
@@ -73,6 +112,18 @@ for port in "$BACKEND_PORT" "$FRONTEND_PORT"; do
     exit 1
   fi
 done
+
+if [[ "$RESET_ALL" == 1 ]]; then
+  # the same first-run step backend/run.sh does, because the reset scripts need the settings (ENCRYPTION_KEY) before it runs
+  if [[ ! -f backend/.env ]]; then
+    echo "Creating backend/.env with a new ENCRYPTION_KEY..."
+    key="$(cd backend && uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+    { grep -v '^ENCRYPTION_KEY=' backend/.env.example; echo "ENCRYPTION_KEY=$key"; } > backend/.env
+  fi
+  echo "Resetting: deleting app.db, knowledgebase.db and Log.db, then rebuilding and seeding them..."
+  (cd backend && uv run python scripts/reset_db.py --yes && uv run python scripts/seed_db.py)
+  echo "Fresh build ready."
+fi
 
 if [[ ! -d replay-chat-vite/node_modules ]]; then
   echo "Installing frontend dependencies..."

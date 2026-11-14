@@ -69,7 +69,7 @@ export function appRoutes(overrides = {}) {
       { id: 'research', name: 'IT Security Assistant' },
     ],
     settings: { models: ['model-a', 'model-b', 'model-c'], connected: false, connections: [] },
-    preferences: { agent_id: 'assistant', model: null, chat_sidebar_hidden: false, replay_prompts_hidden: true },
+    preferences: { agent_id: 'assistant', model: null, chat_sidebar_hidden: false, replay_prompts_hidden: true, show_compact_button: false, show_rewind_button: true },
     ...overrides,
   };
   const routes = {

@@ -79,6 +79,30 @@ def _provider_reason(response: httpx.Response) -> str | None:
     return " ".join(message.split())[:300] if isinstance(message, str) and message.strip() else None
 
 
+def _provider_code(response: httpx.Response) -> str | None:
+    """The provider's own error code for a failed call (OpenAI-style {"error": {"code": ..., "type": ...}}): the code, else
+    the type. None when the body has neither. It is kept in the API log (`api_response_code`) beside the HTTP status."""
+    try:
+        error = response.json()["error"]
+    except ValueError, KeyError, TypeError:
+        return None
+    if not isinstance(error, dict):
+        return None
+    for key in ("code", "type"):
+        value = error.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:100]
+    return None
+
+
+def _mark(response: httpx.Response, outcome: str) -> None:
+    """Change how a call that is already logged is recorded. The entries are plain dicts held in memory until the
+    prompt is finished, so this is not an edit of a stored row."""
+    entry = getattr(response, "logged_call", None)
+    if entry is not None:
+        entry["outcome"] = outcome
+
+
 MAX_LOGGED_TOKENS = 20_000
 """Token log probabilities kept per call (a very long answer keeps its first tokens)."""
 MAX_LOGGED_BODY = 200_000
@@ -166,6 +190,8 @@ async def _post(
         "response": None,
         "error": None,
         "duration_ms": 0,
+        "outcome": "error",  # how the attempt ended: success, failed, timeout or error (see chat_api_log_repository)
+        "api_response_code": None,  # the provider's own error code, when it gave one
     }
     started = time.monotonic()
     try:
@@ -180,9 +206,11 @@ async def _post(
             )
     except httpx.TimeoutException as exc:
         entry["error"] = "The API did not respond in time."
+        entry["outcome"] = "timeout"
         raise LLMError(504, "llm_timeout", "Your API did not respond in time.") from exc
     except httpx.HTTPError as exc:
         entry["error"] = "Could not reach the API."
+        entry["outcome"] = "error"
         raise LLMError(
             502, "llm_unreachable", "Could not reach your API. Check the URL and that the server is running."
         ) from exc
@@ -195,6 +223,12 @@ async def _post(
         }
         if payload.get("logprobs") and response.status_code == 200:
             entry["logprobs"] = token_logprobs(body)  # from the whole body, before the log cuts it
+        if 200 <= response.status_code < 300:
+            entry["outcome"] = "success"  # `complete` changes it to error if the body turns out to be unusable
+        else:
+            entry["outcome"] = "failed"
+            entry["api_response_code"] = _provider_code(response)
+        response.logged_call = entry
         return response
     finally:
         entry["duration_ms"] = round((time.monotonic() - started) * 1000)
@@ -285,12 +319,14 @@ async def complete(
     try:
         data = response.json()
     except ValueError as exc:
+        _mark(response, "error")
         raise LLMError(502, "llm_invalid_response", "The API returned an invalid JSON response.") from exc
     try:
         content = data["choices"][0]["message"]["content"]
     except KeyError, IndexError, TypeError:
         content = None
     if not isinstance(content, str) or not content.strip():
+        _mark(response, "error")
         raise LLMError(
             502,
             "llm_empty_response",

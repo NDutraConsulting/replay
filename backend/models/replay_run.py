@@ -77,6 +77,13 @@ class ApiCall(BaseModel):
     response: ApiCallResponse | None = None
     error: str | None = None
     """Set when there was no response (timeout, unreachable)."""
+    request_retry_counter: int | None = None
+    """Chat calls only: 0 for the first attempt of this purpose for the prompt, 1 for the first retry, and so on."""
+    api_response_code: str | None = None
+    """Chat calls only: the provider's own error code, when it gave one."""
+    response_status: Literal["failed", "timeout", "success", "error"] | None = None
+    """Chat calls only: how the attempt ended. failed: the provider answered with an error status. timeout: no answer
+    in time. error: unreachable, or an answer that could not be used."""
 
 
 class TokenLogprob(BaseModel):
@@ -103,6 +110,10 @@ class ApiLogTurn(BaseModel):
     turn_index: int
     prompt: str
     calls: list[ApiCall]
+    source_conversation_id: str | None = None
+    """Chat API log of a fork: the conversation that made these calls, when it is not the one being viewed."""
+    source_conversation_name: str | None = None
+    """That conversation's name; None when it has since been deleted."""
 
 
 class ApiLog(BaseModel):

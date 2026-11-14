@@ -2,7 +2,10 @@ import sqlite3
 
 import pytest
 
-from db.migrate import MigrationError, apply_migrations
+from db.migrate import MIGRATIONS_DIR, MigrationError, apply_migrations
+
+LATEST = max(int(path.name[:4]) for path in MIGRATIONS_DIR.glob("*.sql"))
+"""The newest app.db migration: the tests that apply "all of them" are written in terms of this, so a new migration never breaks them."""
 
 
 def _write(directory, name, sql):
@@ -95,7 +98,7 @@ def test_failed_migration_rolls_back(tmp_path, mdir):
 
 def test_real_migrations_apply_cleanly(tmp_path):
     db = str(tmp_path / "real.db")
-    assert apply_migrations(db) == [1, 2, 3, 4, 5, 6, 7]
+    assert apply_migrations(db) == list(range(1, LATEST + 1))
     tables = _tables(db)
     assert {"users", "messages", "replay_runs", "stop_requests"} <= tables
     assert not {"kb_categories", "kb_subcategories", "kb_documents", "kb_seeded"} & tables  # moved to knowledgebase.db
@@ -149,7 +152,7 @@ def test_older_conversations_get_their_configuration_from_what_they_used(tmp_pat
     )
     conn.commit()
     conn.close()
-    assert apply_migrations(db) == [6, 7]
+    assert apply_migrations(db) == list(range(6, LATEST + 1))  # 0006 (the one under test) and everything after it
     conn = sqlite3.connect(db)
     rows = {
         r[0]: r[1:]

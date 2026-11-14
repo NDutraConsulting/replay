@@ -15,14 +15,10 @@
 .replay-callout p{font-size:12px;color:#7b7b68;line-height:1.7;margin:7px 0 13px}
 .text-link{font-size:12px;font-weight:650;display:inline-flex;align-items:center;gap:8px}
 .text-link svg{width:14px;height:14px}
-.chat-card{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;min-height:650px;height:calc(100vh - 265px);max-height:1000px}
-.chat-toolbar{padding:15px 24px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;min-height:77px}
-.agent-icon{background:#f1f3ed;border:1px solid #e3e7db;border-radius:9px;width:36px;height:36px;display:grid;place-items:center}
-.agent-icon svg{width:19px;height:19px}
+.chat-card{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;min-height:0}
 .select-wrap{display:flex;flex-direction:column;line-height:1.25}
 .select-wrap label{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
 .select-wrap select{border:0;background:transparent;color:var(--ink);font-size:12px;font-weight:650;max-width:190px;padding:0 20px 0 0;cursor:pointer}
-.toolbar-right{margin-left:auto;display:flex;gap:12px;align-items:center}
 .date-separator{display:flex;align-items:center;gap:14px;justify-content:center;font-size:10px;color:#a0a493;margin-bottom:24px}
 .date-separator:before,.date-separator:after{content:'';width:40px;height:1px;background:var(--line)}
 .message-body{min-width:0;max-width:min(78%,640px);padding:11px 14px;border:1px solid var(--line);border-radius:16px;background:var(--soft)}
@@ -45,10 +41,9 @@
 .composer-bottom .send{margin-left:auto}
 .composer .btn{padding:7px 12px;min-height:34px}
 .below-composer{display:flex;justify-content:space-between;gap:10px;font-size:9px;color:#989d91;padding:9px 3px 0}
-@media(min-width:1650px){.chat-card{height:calc(100vh - 290px)}}
-@media(max-width:1100px){.layout{grid-template-columns:215px minmax(0,1fr)}.chat-toolbar{padding:15px 18px}.composer-hint{display:none}}
-@media(max-width:780px){.layout{grid-template-columns:1fr}.sidebar{display:none}.chat-card{min-height:580px;height:calc(100dvh - 255px)}.chat-toolbar{gap:10px;padding:13px 16px}.toolbar-right{gap:5px}.chat-toolbar .badge{display:none}.select-wrap select{max-width:130px}.composer-area{padding:10px 14px 13px}.below-composer span:last-child{display:none}}
-@media(max-width:440px){.chat-card{min-height:560px}.agent-icon{display:none}.select-wrap select{max-width:135px}}
+@media(max-width:1100px){.layout{grid-template-columns:215px minmax(0,1fr)}.composer-hint{display:none}}
+@media(max-width:780px){.layout{grid-template-columns:1fr}.sidebar{display:none}.chat-card{min-height:0}.select-wrap select{max-width:130px}.composer-area{padding:10px 14px 13px}.below-composer span:last-child{display:none}}
+@media(max-width:440px){.chat-card{min-height:0}.select-wrap select{max-width:135px}}
 .chat-layout{--conversation-width:252px;grid-template-columns:var(--conversation-width) minmax(0,1fr);position:relative;transition:grid-template-columns .28s ease,gap .28s ease}
 .chat-layout .conversation-sidebar{position:relative;z-index:20;display:block;width:var(--conversation-width);min-width:0;transform:translateX(0);visibility:visible;transition:transform .28s ease,visibility .28s}
 .chat-layout.conversation-hidden{grid-template-columns:0 minmax(0,1fr);gap:0}
@@ -71,7 +66,6 @@
 /* The card clips anything outside it (rounded corners), and the rename button is at its top edge: show its tip below. */
 .conversation-name .tooltip:after{bottom:auto;top:calc(100% + 9px);transform:translateY(-3px)}
 .conversation-name .tooltip:hover:after,.conversation-name .tooltip:focus-visible:after{transform:translateY(0)}
-.chat-toolbar{min-height:77px}
 @media(max-width:780px){.conversation-name h2{max-width:24ch}.chat-title{flex:1}}
 .composer-hint.full{color:#9c1c14;font-weight:600}
 .composer textarea:disabled{cursor:not-allowed;opacity:.6}
@@ -88,3 +82,50 @@
 .message-appended{margin-top:8px;padding:6px 9px;border:1px dashed #d4c98a;border-radius:8px;background:#fffdf0;color:#6b5f2a;font-size:12px;line-height:1.5}
 .appended-label{display:block;margin-bottom:2px;font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#8a7d3a}
 .replay-callout-log{margin-top:12px;font-size:12px}
+/* Lock button: an icon-only button next to Send */
+.composer-bottom .lock-chat{margin-left:auto;padding:7px 10px}
+.composer-bottom .lock-chat+.send{margin-left:0}
+.composer-bottom .lock-chat svg{width:15px;height:15px}
+.composer-bottom .lock-chat:disabled{opacity:.45;cursor:not-allowed}
+/* A locked conversation: the banner above the composer, the badge and the fork note in the toolbar */
+.lock-banner{display:flex;align-items:center;gap:10px;margin:0 0 10px;padding:9px 12px;border:1px solid #e8dfa6;border-radius:10px;background:#faf8e9;font-size:12px;color:var(--ink)}
+.lock-banner svg{width:15px;height:15px;flex:none}
+.lock-banner .btn{margin-left:auto;padding:6px 12px;min-height:30px}
+.lock-badge{display:inline-flex;align-items:center;gap:5px}
+.lock-badge svg{width:12px;height:12px}
+.fork-note{color:#7d8374;margin-top:2px}
+/* The trash can floats at the right edge of the Settings title (outside the <details>, so it stays when Settings is closed) */
+.side-settings-wrap{position:relative}
+.delete-chat{position:absolute;top:5px;right:14px;width:30px;height:30px;color:var(--muted)}
+.delete-chat svg{width:15px;height:15px}
+.delete-chat:hover:not(:disabled){color:#9c1c14;background:#fbeeed}
+.delete-chat:disabled{opacity:.45;cursor:not-allowed}
+.delete-chat.tooltip:after{left:auto;right:0}
+
+/* The chat page fills the window: the layout takes all the height left under the top bar and above the footer, the card fills
+   the layout, and the messages scroll inside the card. The floor keeps a very short window from squashing the card (the page
+   scrolls instead). The sidebar sits in the same row, so if it is ever taller than the space left, the row grows to fit it. */
+body[data-page="chat"]{height:100vh;height:100dvh;display:flex;flex-direction:column}
+body[data-page="chat"] .topbar{flex:none}
+body[data-page="chat"] #main{flex:1 1 0;min-height:0;width:100%;display:flex;flex-direction:column}
+body[data-page="chat"] .chat-layout{flex:1 1 0;min-height:480px}
+body[data-page="chat"] #main>footer{flex:none}
+/* The conversation's name sits in the top bar, to the right of the File menu */
+.topbar-title{display:flex;flex-direction:column;justify-content:center;min-width:0;flex:0 1 auto;margin-left:-14px}
+.topbar-title .fork-note{margin-top:-3px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* The badges and New Chat take the avatar's place at the right end of the top bar */
+.topbar-actions{display:flex;align-items:center;gap:12px;flex:none}
+@media(max-width:780px){.topbar-actions .badge{display:none}.topbar-actions{gap:8px}.topbar-actions .btn{padding:8px 10px;min-height:36px}}
+/* The Config popup: iOS-style switches */
+.config-switches{list-style:none;margin:0;padding:0}
+.config-row{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:14px 0;border-bottom:1px solid var(--line)}
+.config-row:last-child{border-bottom:0}
+.config-text label{font-weight:600;font-size:13px;cursor:pointer}
+.config-text .modal-hint{margin:2px 0 0}
+.ios-switch{appearance:none;-webkit-appearance:none;position:relative;flex:none;width:51px;height:31px;margin:0;border:0;border-radius:31px;background:#e5e5ea;cursor:pointer;transition:background .2s}
+.ios-switch::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 5px #0000003d;transition:transform .2s}
+.ios-switch:checked{background:#34c759}
+.ios-switch:checked::after{transform:translateX(20px)}
+.ios-switch:focus-visible{outline:3px solid #8bb3ff;outline-offset:3px}
+.ios-switch:disabled{opacity:.5;cursor:not-allowed}
+@media(prefers-reduced-motion:reduce){.ios-switch,.ios-switch::after{transition:none}}

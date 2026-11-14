@@ -26,6 +26,10 @@ export const conversationFields = (c) => ({
   briefInstruction: c.brief_instruction ?? '', // the exact text the server adds to the end of each request
   briefReplies: c.brief_replies ?? false, // "Respond in 100 words or less." is added to the end of each request
   sourceConversationId: c.source_conversation_id,
+  locked: c.locked ?? false, // a locked conversation takes no more prompts (it can still be replayed or forked)
+  lockReason: c.lock_reason ?? null, // 'user' or 'replay'
+  forkedFromConversationId: c.forked_from_conversation_id ?? null, // set on a fork
+  forkedFromName: c.forked_from_name ?? null, // that conversation's name; null once it has been deleted
   maxUserPrompts: c.max_user_prompts ?? null, // the most prompts a conversation may hold (null: the server sent no limit)
   messages: c.messages,
 });
@@ -39,6 +43,15 @@ export function chatState(app, conversation) {
     connected: app.settings.connected,
     // the sidebar always starts closed; opening it is per visit
     conversationHidden: true,
+    // how many prompts the page shows: null = all of them; fewer while the user has stepped back with Rewind (per visit)
+    viewPrompts: null,
+    // rewind mode: entered with Rewind, left only by Start fork or Cancel (stepping all the way forward does not leave it)
+    rewindMode: false,
+    // the Config popup's switches: which optional buttons the page shows (saved with the user's preferences)
+    showCompactButton: app.preferences.showCompactButton ?? false,
+    showRewindButton: app.preferences.showRewindButton ?? true,
+    // true right after the open chat was deleted: nothing is open until the user starts or opens a chat
+    cleared: false,
     // what the New conversation popup starts with
     defaultAgentId: resolveAgent(app.agents, app.preferences.agentId),
     defaultModel: resolveModel(app.settings.models, app.preferences.model),
@@ -61,8 +74,19 @@ export const sendMessage = (conversationId, { content, requestId }, signal) =>
 export const stopMessage = (conversationId, requestId) =>
   api.post(`/api/conversations/${conversationId}/stop`, { request_id: requestId });
 
-/** Remove the last prompt (and what followed). @returns {{messages: object[], removed_prompt: string}} */
-export const rewindConversation = (conversationId) => api.post(`/api/conversations/${conversationId}/rewind`);
+/** Delete a conversation for good: its messages go with it. This cannot be undone. */
+export const deleteConversation = (conversationId) => api.delete(`/api/conversations/${conversationId}`);
+
+/** Lock a conversation: no more prompts can be added, but it stays available for replay. Locking twice is fine. */
+export const lockConversation = (conversationId) => api.post(`/api/conversations/${conversationId}/lock`);
+
+/**
+ * Fork a conversation: copy it into a NEW conversation (new id), up to and including `throughMessageId` (all of it when
+ * omitted). Nothing is sent to a model. The fork is unlocked and becomes the current conversation.
+ * @throws ApiError code `prompt_in_progress` while a prompt of the conversation waits for its reply
+ */
+export const forkConversation = (conversationId, throughMessageId) =>
+  api.post(`/api/conversations/${conversationId}/fork`, throughMessageId ? { through_message_id: throughMessageId } : {});
 
 /**
  * Start a conversation with its fixed settings (the New conversation popup).

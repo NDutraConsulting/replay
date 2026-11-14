@@ -27,6 +27,8 @@ INTERNAL_TYPES = ("kb_reference", "kb_summary_tool")
 # accepts differs by model; a provider that rejects one answers 400 and the message is marked failed.
 REASONING_LEVELS = ("default", "none", "minimal", "low", "medium", "high", "xhigh")
 ReasoningLevel = Literal["default", "none", "minimal", "low", "medium", "high", "xhigh"]
+LockReason = Literal["user", "replay"]
+"""Why a conversation is locked: the user locked it, or a replay of it started (it is then locked automatically)."""
 MAX_NAME_LENGTH = 80
 MAX_TEMPERATURE = 2.0
 """OpenAI accepts a temperature from 0 to 2. 0 (the default here) is the least random."""
@@ -47,7 +49,11 @@ class Conversation(BaseModel):
     brief_replies: bool = False
     """Append "Respond in 100 words or less." to the end of each request (services/history_service.BRIEF_REPLY_INSTRUCTION)."""
     source_conversation_id: str | None = None
-    """Set on a conversation started by Compact: the conversation it summarises."""
+    """Set on a conversation started by Compact: the conversation it summarises. (A fork is recorded in
+    Log.db's conversation_fork_log instead.)"""
+    locked_at: datetime | None = None
+    lock_reason: LockReason | None = None
+    """A locked conversation takes no more prompts but stays available for replay. Continuing it means forking it."""
     created_at: datetime
     updated_at: datetime
 
@@ -89,6 +95,12 @@ class ConversationView(BaseModel):
     brief_instruction: str
     """The exact text added to the end of each request when `brief_replies` is on, so the page can show what is sent."""
     source_conversation_id: str | None
+    locked: bool
+    lock_reason: LockReason | None
+    forked_from_conversation_id: str | None
+    """The conversation this one was forked from (read from the fork log), if it is a fork."""
+    forked_from_name: str | None
+    """That conversation's name; None when it is not a fork or the conversation has since been deleted."""
     created_at: datetime
     max_user_prompts: int
     """The most prompts a conversation may hold (MAX_USER_PROMPTS in .env): the page stops offering to send past it."""
@@ -108,6 +120,8 @@ class ConversationSummary(BaseModel):
     kb_summary_tool: bool
     brief_replies: bool
     source_conversation_id: str | None
+    locked: bool
+    forked_from_conversation_id: str | None
     prompt_count: int
     created_at: datetime
     updated_at: datetime
@@ -126,6 +140,14 @@ class NewConversationRequest(BaseModel):
     sent (services/OpenAI_API_Model_rules.py decides, and the API log says so)."""
     kb_summary_tool: bool = False
     brief_replies: bool = False
+
+
+class ForkRequest(BaseModel):
+    """Fork a conversation: copy it into a NEW conversation (new id). Nothing is sent to a model."""
+
+    through_message_id: str | None = Field(default=None, min_length=1, max_length=64)
+    """Copy up to and including this message (one of the conversation's visible messages). Without it the whole
+    conversation is copied."""
 
 
 class UpdateConversationRequest(BaseModel):
@@ -156,8 +178,3 @@ class StopMessageRequest(BaseModel):
 class SendMessageResponse(BaseModel):
     messages: list[Message]
     """[the user's message, the assistant's reply]"""
-
-
-class RewindResponse(BaseModel):
-    messages: list[Message]
-    removed_prompt: str

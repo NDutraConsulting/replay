@@ -1,6 +1,5 @@
 import './styles/file-menu.css';
 import { esc } from './html.js';
-import { noticeDialog } from './modal-ui.js';
 
 /**
  * The File menu, one component for every page that has one. It lives in the top navbar (the `#topbar-file` slot that the
@@ -11,9 +10,6 @@ import { noticeDialog } from './modal-ui.js';
  */
 export const fileMenuHTML = (items) =>
   `<div class="file-menu"><button type="button" class="file-menu-btn" id="file-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="file-menu">File<span class="file-caret" aria-hidden="true">▾</span></button><div class="file-menu-list" id="file-menu" role="menu" aria-label="File" hidden>${items.map((i) => `<button type="button" role="menuitem" class="file-menu-item" id="${esc(i.id)}" ${i.disabled ? 'disabled' : ''}>${esc(i.label)}</button>`).join('')}</div></div>`;
-
-export const showConfigLocked = () =>
-  noticeDialog({ title: 'Config', message: 'Locked for educational purposes. Start a new chat for different settings.' });
 
 let teardown = null;
 

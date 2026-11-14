@@ -67,8 +67,10 @@ check "demo reply stored" "d['messages'][1]['demo'] is True and d['messages'][1]
 call POST "/api/conversations/$CONV/stop";                    expect 200 "stop with nothing pending"
 check "nothing was stopped" "d['stopped'] is False"
 call POST "/api/chat-records" "{\"conversation_id\":\"$CONV\"}"; expect 201 "save a chat record"
-call POST "/api/conversations/$CONV/rewind";                  expect 200 "rewind"
-check "rewound the smoke prompt" "d['removed_prompt']=='smoke test prompt'"
+call POST "/api/conversations/$CONV/fork" '{}';               expect 201 "fork a conversation (a copy with a new id)"
+check "the fork has the prompt and its own id" "d['conversation_id']!='$CONV' and d['messages'][0]['content']=='smoke test prompt' and d['forked_from_conversation_id']=='$CONV'"
+call POST "/api/conversations/$CONV/lock";                    expect 200 "lock the source"
+call POST "/api/conversations/$CONV/messages" '{"content":"too late"}'; expect 409 "a locked conversation takes no more prompts"
 call POST /api/conversations '{"name":"Research chat","agent_id":"research","model":"m1"}'; expect 201 "start a research conversation"
 RCONV="$(field "d['conversation_id']")"
 call POST "/api/conversations/$RCONV/messages" '{"content":"How should I segment my network and set firewall rules?"}'

@@ -219,16 +219,6 @@ def test_a_failed_turn_leaves_no_file_to_be_sent_again(chat, llm_stub, db):
     assert sum("reference_document" in m["content"] for m in sent) == 1  # only the turn that is being answered
 
 
-def test_rewinding_removes_the_turns_file_reference(chat, db):
-    client, _ = chat
-    cid = new(client)
-    send(client, cid, "one")
-    send(client, cid, "two")
-    assert client.post(f"/api/conversations/{cid}/rewind").status_code == 200
-    kinds = app_rows(db, "SELECT message_type FROM messages WHERE conversation_id = ? ORDER BY sequence_number", (cid,))
-    assert [k[0] for k in kinds] == ["chat", "kb_reference", "chat"]
-
-
 def test_a_question_that_reaches_no_file_stores_no_reference(chat, llm_stub, db):
     client, _ = chat
     cid = new(client)

@@ -23,13 +23,13 @@ uv sync
 
 | File | Setting | Holds |
 |---|---|---|
-| `app.db` | `DATABASE_PATH` | accounts, sessions, agents, provider settings, preferences, conversations, replay runs and results |
+| `app.db` | `DATABASE_PATH` | accounts, sessions, agents, provider settings, preferences, conversations, `conversation_forks` (which conversation was forked from which), replay runs and results |
 | `knowledgebase.db` | `KNOWLEDGE_DB_PATH` | the knowledge bases (categories, sub categories, files, seed markers) and the `knowledge_base_choice` table |
-| `Log.db` | `LOG_DB_PATH` | the raw API log: every REST call made to the model provider while a replay result was produced (URL, request, response; never the API key) |
+| `Log.db` | `LOG_DB_PATH` | the raw API log, **append-only**: every REST call made to the model provider while a chat prompt was answered or a replay result was produced (URL, request, response; never the API key), plus the fork log |
 
 Each has its own migrations (`db/migrations/`, `db/kb_migrations/`, `db/log_migrations/`) and its own `schema_migrations` table. There are no foreign
 keys between them: knowledge rows carry a plain `user_id` and `agent_id`, every query is scoped by `user_id`, and the agent is
-checked against `app.db`. Deleting a user must also call `kb_repository.delete_user_knowledge`. **Back the files up together.** `Log.db` is only read by the Replay page's API log button; deleting it (`./run.sh --reset-log`) loses the logs and nothing else.
+checked against `app.db`. Deleting a user must also call `kb_repository.delete_user_knowledge`. **Back the files up together.** `Log.db` is only read by the API log buttons. The application never updates or deletes a chat log row (see "The chat log is append-only" below); `./run.sh --reset-log` (and `--reset`) delete the whole file, which is an administrator action outside the API and destroys that record. `run.sh` refuses any `--reset*` while a server is already running on its port (stop it first, or use `./run.sh restart --reset-log`): deleting the files under a live server leaves it with no log tables. If `Log.db` is deleted or emptied under a running server anyway, the log repositories rebuild its schema from the migrations on the next read or write (`db.connection.run_in_log_db`) instead of failing with `no such table`; the old rows are gone with the file.
 
 Databases created before the split are upgraded automatically at startup: the knowledge base rows are copied out of `app.db`,
 the copy is verified, and only then does migration 0004 drop the old tables (any problem stops startup before anything is dropped).
@@ -128,7 +128,7 @@ All routes are under `/api`, JSON in and out, errors as `{"error": {"code", "mes
 | Account | `POST /account/signup`, `POST /account/login`, `POST /account/logout`, `GET /me` |
 | Agents, APIs | `GET /agents`, `GET /settings` (every model choice, `"<API label>::<model>"`, and the APIs), `GET/POST /connections`, `PUT/DELETE /connections/{id}`, `POST /connections/{id}/test`, `GET/PUT /preferences` |
 | Knowledge base | `GET /agents/{agent_id}/knowledge-base`, `POST /agents/{agent_id}/categories`, `POST /agents/{agent_id}/knowledge-base/reset`, `DELETE /categories/{id}`, `POST /categories/{id}/subcategories`, `DELETE /subcategories/{id}`, `POST /subcategories/{id}/documents`, `POST /subcategories/{id}/documents:upload`, `GET/PATCH/DELETE /documents/{id}` (the deletes and the reset take `?delete_conversations=true\|false`, see below) |
-| Chat | `GET /conversations/current`, `POST /conversations` (the five settings), `GET/PATCH /conversations/{id}` (PATCH renames only), `POST /conversations/{id}/messages`, `POST /conversations/{id}/rewind`, `POST /conversations/{id}/stop`, `POST /conversations/{id}/compact`, `GET/POST /chat-records` |
+| Chat | `GET /conversations/current`, `POST /conversations` (the five settings), `GET/PATCH /conversations/{id}` (PATCH renames only), `POST /conversations/{id}/messages`, `POST /conversations/{id}/stop`, `POST /conversations/{id}/compact`, `POST /conversations/{id}/lock`, `POST /conversations/{id}/fork`, `DELETE /conversations/{id}`, `GET/POST /chat-records` |
 | Replay | `POST /replay-runs`, `GET /replay-runs/current`, `PATCH /replay-runs/{id}`, `POST /replay-runs/{id}/steps`, `POST /replay-runs/{id}/stop`, `POST /replay-runs/{id}/save`, `GET /saved-replays`, `GET /saved-replays/{id}` |
 
 ### Knowledge base routing
@@ -191,6 +191,58 @@ request.
 **Compact** (`POST /conversations/{id}/compact`): a model summarises the conversation, including the text of every file it
 used, and a NEW conversation starts from that summary (`compacted_summary`, `source_conversation_id`), with the same settings.
 The earlier conversation is untouched. A conversation that began with a summary replays from it.
+
+**Locking and forking.** A conversation can be locked (`POST /conversations/{id}/lock`): it takes no more prompts (a send
+answers 409 `conversation_locked`, and nothing is stored) but stays available for replay. Locking twice is fine; it
+answers 409 `prompt_in_progress` while a prompt still waits for its reply, and it does not change which conversation is
+current. The first step of a replay of a conversation (`replay_runs.source_conversation_id`) locks it automatically
+(`lock_reason` `replay`; loading it into Replay does not), so a source never changes under its replays. Rename and Compact
+stay allowed on a locked conversation. To keep going, fork it: `POST /conversations/{id}/fork` with an optional
+`{"through_message_id"}` copies the conversation (up to and including that visible message) into a NEW conversation with a new
+id, the same fixed settings, the name `"<name> (fork)"` and new message rows (same order, request ids, statuses and knowledge base
+fields; `ignored` rows are left out). No model is called. The fork is unlocked and becomes the current conversation, and its
+view carries `forked_from_conversation_id` and `forked_from_name`, read from `conversation_forks` in `app.db` (`fork_id`,
+`conversation_id` unique, `origin_conversation_id` the direct parent, `created_at`, `created_by`). Its ids are plain, with no
+foreign keys, so deleting a conversation keeps its rows and a fork still knows where it came from ("a deleted conversation").
+The copy spans three files, so it is not one transaction: the messages and the `conversation_forks` row (`app.db`, one
+transaction), then the knowledge base choices of the copied prompts (`knowledgebase.db`), then, last, the audit copy of the
+fork (`conversation_fork_log`, same `fork_id`) and the API-log rows (`Log.db`, one transaction). If a later step fails the new
+conversation, its fork row and its choices are deleted. A fork
+refuses with 409 `prompt_in_progress` while a copied prompt waits for its reply.
+
+**Deleting a conversation** (`DELETE /conversations/{id}`, 204; the trash can in the Chat page's sidebar, behind a warning that it can
+not be undone) removes the conversation, its messages (cascade), its knowledge base choices and its pending stop markers. A
+locked conversation can be deleted too. Replays started from it keep their prompts and lose the link (`source_conversation_id`
+becomes null); its `conversation_forks` rows stay, so a fork still shows where it came from ("a deleted conversation"); and
+nothing in `Log.db` is touched, so a fork keeps showing the calls behind the answers it copied. 404 for a conversation that is
+not the caller's or is already gone. The page does not load another chat in its place: it clears the interface and opens the New conversation popup.
+
+**The chat log is append-only (`Log.db`).** `chat_api_calls` holds one row per attempt (shared by a conversation and its forks, never
+copied); `chat_api_conversation_requests` has one row per prompt of a conversation `(conversation_id, request_id, message_id)`
+that points at those calls (a fork copies these small rows under its own conversation and message ids); `conversation_fork_log`
+is the append-only audit copy of each fork `(fork_id, conversation_id, origin_conversation_id, created_at, created_by)`, with the
+same `fork_id` as the app's own `conversation_forks` row; the application only writes it and never reads it. Triggers refuse every
+UPDATE and DELETE on all three, and writes are plain INSERTs (a repeated request id keeps the first record). Nothing in the API removes a prompt (the old `/rewind` route is gone: Rewind on the page only hides later turns, and Start fork copies), so a log row never loses its prompt. A conversation's API log is read through its own rows and
+joins on `user_id` as well as `request_id`, because the client chooses the request id. A turn copied into a fork carries
+`source_conversation_id` / `source_conversation_name` (the conversation that made the calls; the name is null once that
+conversation is deleted). **Deleting logs is an administrator procedure that this application does not provide** (it would
+have to drop the triggers first). Migration `0005_chat_logs.sql` discarded the old, mutable chat log once (beta). Append-only
+storage is one control; it does not by itself make a deployment SOC 2 or HIPAA compliant (access to `Log.db`, encryption at
+rest and retention are separate decisions). The replay log tables are not append-only yet: deleting a file that replays used
+still deletes those replays' log rows.
+
+**Retries are logged per attempt.** Each `chat_api_calls` row has `request_retry_counter` (0 for the first attempt of a purpose
+within a prompt, 1 for the first retry, ...), `api_response_code` (the provider's own error code or type, null on success) and
+`response_status`: `success`, `failed` (the provider answered with an error status), `timeout` (no answer in time) or `error`
+(unreachable, or a 200 whose body could not be used). `http_status` is the HTTP status. The reason a retry happened is the
+previous attempt's code and status. Two queries this allows (no dashboard is built):
+
+```sql
+-- prompts that needed more than one attempt of the same purpose (broken retry logic, or a stray worker)
+SELECT request_id, purpose, MAX(request_retry_counter) + 1 AS attempts FROM chat_api_calls GROUP BY request_id, purpose HAVING attempts > 2;
+-- how attempts ended, by provider code, over time
+SELECT substr(called_at, 1, 10) AS day, response_status, api_response_code, COUNT(*) FROM chat_api_calls GROUP BY 1, 2, 3;
+```
 
 **Deleting files that were used.** Deleting a file, sub category or category, or restoring defaults, removes the versions.
 If conversations or replays were answered with them, the first call answers 409 `kb_version_in_use` with

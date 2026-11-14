@@ -11,6 +11,10 @@ class UserPreferences(BaseModel):
     """The chat page's \"This conversation\" sidebar starts closed."""
     replay_prompts_hidden: bool = True
     """The replay "Your prompts" panel starts closed."""
+    show_compact_button: bool = False
+    """The Chat page's Compact button is shown only when the user turns it on in Config (off by default)."""
+    show_rewind_button: bool = True
+    """The Chat page's Rewind button (it enters rewind mode) is shown unless the user turns it off in Config."""
     updated_at: datetime | None = None
 
 
@@ -19,6 +23,8 @@ class PreferencesView(BaseModel):
     model: str | None
     chat_sidebar_hidden: bool
     replay_prompts_hidden: bool
+    show_compact_button: bool
+    show_rewind_button: bool
 
 
 class UpdatePreferencesRequest(BaseModel):
@@ -29,3 +35,5 @@ class UpdatePreferencesRequest(BaseModel):
     model: str | None = None
     chat_sidebar_hidden: bool | None = None
     replay_prompts_hidden: bool | None = None
+    show_compact_button: bool | None = None
+    show_rewind_button: bool | None = None

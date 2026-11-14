@@ -154,30 +154,10 @@ def test_send_validation(logged_in_client):
     assert logged_in_client.post("/api/conversations").status_code == 422  # the settings are required
 
 
-# ---- rewind
-def test_rewind_removes_the_last_prompt_and_what_followed(logged_in_client):
-    cid = current(logged_in_client)["conversation_id"]
-    send(logged_in_client, cid, "second to last")
-    send(logged_in_client, cid, "the last one")
-    response = logged_in_client.post(f"/api/conversations/{cid}/rewind")
-    assert response.status_code == 200
-    assert response.json()["removed_prompt"] == "the last one"
-    assert response.json()["messages"][-1]["content"].startswith("Demo ·")
-    assert [m["content"] for m in response.json()["messages"]][-2] == "second to last"
-    assert len(current(logged_in_client)["messages"]) == 2  # the first exchange is all that is left
-
-
-def test_rewind_with_no_prompts_is_a_conflict(logged_in_client):
-    cid = new(logged_in_client)
-    response = logged_in_client.post(f"/api/conversations/{cid}/rewind")
-    assert response.status_code == 409 and response.json()["error"]["code"] == "nothing_to_rewind"
-
-
 # ---- ownership
 def test_other_users_cannot_read_or_use_a_conversation(logged_in_client, other_client):
     cid = current(logged_in_client)["conversation_id"]
     assert send(other_client, cid).status_code == 404
-    assert other_client.post(f"/api/conversations/{cid}/rewind").status_code == 404
     assert other_client.post(f"/api/conversations/{cid}/stop").status_code == 404
     assert current(other_client)["conversation_id"] != cid
 
@@ -270,12 +250,16 @@ async def test_a_reply_that_arrives_before_any_stop_is_stored_normally(async_cli
     assert (await async_client.post(f"/api/conversations/{cid}/stop")).json() == {"stopped": False}
 
 
-async def test_rewinding_while_a_reply_is_in_flight_drops_the_late_reply(async_client, llm_stub):
+async def test_a_prompt_that_vanishes_while_its_reply_is_in_flight_drops_the_late_reply(
+    async_client, llm_stub, test_settings
+):
     await connect_async(async_client)
     cid = (await async_client.get("/api/conversations/current")).json()["conversation_id"]
     task = await start_send(async_client, cid, llm_stub)
-    rewound = await async_client.post(f"/api/conversations/{cid}/rewind")
-    assert rewound.json()["removed_prompt"] == "slow one"
+    with sqlite3.connect(test_settings.DATABASE_PATH) as conn:
+        conn.execute(
+            "DELETE FROM messages WHERE conversation_id = ?", (cid,)
+        )  # nothing in the API removes a prompt now
     llm_stub.gate.set()
     response = await task
     assert response.status_code == 409 and response.json()["error"]["code"] == "prompt_removed"
@@ -606,21 +590,6 @@ def test_demo_mode_is_recorded_with_no_calls_and_an_older_chat_is_not(logged_in_
     assert api_log(logged_in_client, older).json()["recorded"] is False
 
 
-def test_rewinding_a_prompt_removes_its_calls_from_the_log(logged_in_client, llm_stub, test_settings):
-    connect(logged_in_client)
-    cid = new(logged_in_client, model="m1")
-    send(logged_in_client, cid, "keep")
-    send(logged_in_client, cid, "drop")
-    assert logged_in_client.post(f"/api/conversations/{cid}/rewind").status_code == 200
-    log = api_log(logged_in_client, cid).json()
-    assert [t["prompt"] for t in log["turns"]] == ["keep"]
-    import sqlite3
-
-    with sqlite3.connect(test_settings.LOG_DB_PATH) as conn:
-        left = conn.execute("SELECT COUNT(*) FROM chat_api_requests WHERE conversation_id = ?", (cid,)).fetchone()[0]
-    assert left == 1
-
-
 # ---- the most prompts a conversation may hold (MAX_USER_PROMPTS)
 def test_the_default_limit_is_ten_and_the_view_says_so(logged_in_client, test_settings):
     from config import Settings
@@ -664,16 +633,6 @@ def test_the_limit_is_per_conversation_and_a_new_one_starts_empty(logged_in_clie
     assert send(logged_in_client, second, "fresh start").status_code == 200
 
 
-def test_rewinding_frees_a_slot(logged_in_client, monkeypatch, test_settings):
-    monkeypatch.setattr(test_settings, "MAX_USER_PROMPTS", 2)
-    cid = new(logged_in_client)
-    send(logged_in_client, cid, "one")
-    send(logged_in_client, cid, "two")
-    assert send(logged_in_client, cid, "three").status_code == 409
-    assert logged_in_client.post(f"/api/conversations/{cid}/rewind").status_code == 200
-    assert send(logged_in_client, cid, "three").status_code == 200
-
-
 def test_a_compacted_conversation_starts_with_no_prompts_used(logged_in_client, monkeypatch, test_settings):
     monkeypatch.setattr(test_settings, "MAX_USER_PROMPTS", 1)
     cid = new(logged_in_client)
@@ -701,3 +660,44 @@ def test_the_limit_comes_from_the_setting_not_a_fixed_number(logged_in_client, m
         assert send(logged_in_client, cid, f"p{i}").status_code == 200
     assert send(logged_in_client, cid, "p12").status_code == 409
     assert logged_in_client.get(f"/api/conversations/{cid}").json()["max_user_prompts"] == 12
+
+
+# ---- a model and reasoning level the model is documented not to accept are refused when the chat is created
+def create_chat(client, model, reasoning_level):
+    return client.post(
+        "/api/conversations",
+        json={"name": "Check", "agent_id": "assistant", "model": model, "reasoning_level": reasoning_level},
+    )
+
+
+def test_a_reasoning_level_the_model_does_not_accept_is_refused_before_the_chat_exists(logged_in_client):
+    connect(logged_in_client, models=("gpt-6.1-sol", "gpt-6.1-terra", "m1"))
+    before = len(logged_in_client.get("/api/conversations").json())
+    refused = create_chat(logged_in_client, "gpt-6.1-sol", "none")
+    assert refused.status_code == 400
+    error = refused.json()["error"]
+    assert error["code"] == "llm_unsupported_setting"
+    assert "gpt-6.1-sol does not support the reasoning level none" in error["message"]
+    assert "low, medium, high, xhigh, max" in error["message"]  # says what it does accept
+    assert len(logged_in_client.get("/api/conversations").json()) == before  # no chat that could never send
+
+
+@pytest.mark.parametrize(
+    "level", ["low", "medium", "high", "xhigh", "default"]
+)  # the levels a chat can have (no "max")
+def test_every_level_the_model_accepts_still_creates_the_chat(logged_in_client, level):
+    connect(logged_in_client, models=("gpt-6.1-sol", "m1"))
+    created = create_chat(logged_in_client, "gpt-6.1-sol", level)
+    assert created.status_code == 201, created.text
+    assert created.json()["reasoning_level"] == level
+
+
+def test_a_model_that_accepts_none_and_an_unknown_model_are_not_refused(logged_in_client):
+    connect(logged_in_client, models=("gpt-6.1-sol", "gpt-6.1-terra", "m1"))
+    assert create_chat(logged_in_client, "gpt-6.1-terra", "none").status_code == 201
+    assert create_chat(logged_in_client, "m1", "none").status_code == 201  # no rule: nothing to refuse
+
+
+def test_demo_mode_is_not_blocked(logged_in_client):
+    """Without a connected API the models are the demo names; none of them has a rule."""
+    assert create_chat(logged_in_client, "model-a", "none").status_code == 201

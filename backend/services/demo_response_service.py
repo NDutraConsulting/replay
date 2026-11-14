@@ -43,6 +43,6 @@ def _demo_text(history: list[dict], target: str, agent: str, models: list[str]) 
     return (
         f"Demo · {target}\n\nA useful starting point for “{excerpt}”:\n\n1. Keep the purpose clear.\n"
         "2. Focus on the most important next step.\n3. Leave room to try a different approach.\n\n"
-        "You can rewind this turn to edit your prompt, or open Replay to compare another model’s output. "
+        "You can fork this conversation from an earlier turn, or open Replay to compare another model’s output. "
         "Connect an API in Account for real AI responses."
     )

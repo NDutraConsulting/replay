@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { setUnauthorizedHandler } from '../../shared/http.js';
-import { apiError, appRoutes, created, mockApi, settle } from '../../test/mock-api.js';
+import { apiError, appRoutes, created, mockApi, noContent, settle } from '../../test/mock-api.js';
 
 const $ = (id) => document.getElementById(id);
 const ID = /^[A-Za-z0-9_-]{8,64}$/; // a request id the backend accepts
@@ -19,16 +19,19 @@ const sample = () => [
 ];
 
 /** An in-memory fake of the conversation routes. `server.hold` makes sends wait for `server.release()`. */
-function chatServer({ appOverrides = {}, messages = sample(), isSample = true, failSend = null, config = {} } = {}) {
+function chatServer({ appOverrides = {}, messages = sample(), isSample = true, failSend = null, config = {}, otherChats } = {}) {
   const { state: app, routes } = appRoutes(appOverrides);
   const server = {
     app,
     conversation: {
       conversation_id: 'c1', is_sample: isSample, name: 'Sample conversation', agent_id: 'assistant', model: 'model-a',
       reasoning_level: 'default', kb_summary_tool: false, source_conversation_id: null, created_at: '2026-01-01T00:00:00Z', max_user_prompts: 10, messages,
+      locked: false, lock_reason: null, forked_from_conversation_id: null, forked_from_name: null,
       ...config,
     }, // fmt: skip
     hold: false,
+    otherChats,
+    forks: 0,
     failRefresh: false,
     order: [],
     release: () => {},
@@ -36,6 +39,7 @@ function chatServer({ appOverrides = {}, messages = sample(), isSample = true, f
   let next = 100;
   const send = async ({ body, params, signal }) => {
     server.order.push('send');
+    if (server.conversation.locked) return apiError(409, 'conversation_locked', 'This conversation is locked. Open it to fork it and keep going from a copy.');
     const user = msg(next++, 'user', body.content, { status: 'pending', request_id: body.request_id });
     server.conversation.messages.push(user);
     server.conversation.is_sample = false;
@@ -92,12 +96,33 @@ function chatServer({ appOverrides = {}, messages = sample(), isSample = true, f
       if (pending) last.status = 'stopped';
       return { stopped: pending };
     },
-    'POST /api/conversations/:id/rewind': () => {
-      const i = server.conversation.messages.findLastIndex((m) => m.role === 'user');
-      if (i < 0) return apiError(409, 'nothing_to_rewind', 'There is no prompt to rewind.');
-      const [removed] = server.conversation.messages.splice(i);
-      server.conversation.is_sample = false;
-      return { messages: structuredClone(server.conversation.messages), removed_prompt: removed.content };
+    'PUT /api/preferences': ({ body }) => server.failPrefs ?? Object.assign(app.preferences, body),
+    'DELETE /api/conversations/:id': ({ params }) => {
+      if (server.failDelete) return server.failDelete;
+      server.deleted = [...(server.deleted ?? []), params.id];
+      return noContent();
+    },
+    'POST /api/conversations/:id/lock': () => {
+      if (server.failLock) return server.failLock;
+      server.conversation.locked = true;
+      server.conversation.lock_reason ??= 'user';
+      return structuredClone(server.conversation);
+    },
+    'POST /api/conversations/:id/fork': ({ params, body }) => {
+      if (server.failFork) return server.failFork;
+      const source = server.conversation.conversation_id === params.id ? server.conversation : (server.otherChats ?? []).find((o) => o.conversation_id === params.id);
+      let kept = structuredClone(source.messages ?? []);
+      if (body?.through_message_id) {
+        const at = kept.findIndex((m) => m.message_id === body.through_message_id);
+        if (at < 0) return apiError(404, 'not_found', 'Message not found.');
+        kept = kept.slice(0, at + 1);
+      }
+      server.conversation = {
+        ...structuredClone(source), conversation_id: `fork-${++server.forks}`, is_sample: false, name: `${source.name} (fork)`,
+        locked: false, lock_reason: null, forked_from_conversation_id: source.conversation_id, forked_from_name: source.name,
+        messages: kept.map((m, n) => ({ ...m, message_id: `f${server.forks}-${n}` })),
+      }; // fmt: skip
+      return created(structuredClone(server.conversation));
     },
     'GET /api/conversations': () => {
       if (server.failList) return server.failList;
@@ -138,13 +163,18 @@ function chatServer({ appOverrides = {}, messages = sample(), isSample = true, f
   return { server, mock };
 }
 
-async function boot(options) {
+/** Load the page. The "Welcome back" popup that opens on arrival is dismissed (so the tests start from the chat on screen), unless `keepArrival`. */
+async function boot({ keepArrival = false, ...options } = {}) {
   vi.resetModules();
   document.body.innerHTML = '';
   setUnauthorizedHandler(vi.fn());
-  const fake = chatServer(options);
+  // Most tests were written when Compact was always shown, so they start with its switch on (it is off for a new user). The
+  // Config tests pass their own preferences; anything given in `appOverrides.preferences` wins.
+  const preferences = { agent_id: 'assistant', model: null, chat_sidebar_hidden: false, replay_prompts_hidden: true, show_compact_button: true, show_rewind_button: true, ...options.appOverrides?.preferences };
+  const fake = chatServer({ ...options, appOverrides: { ...options.appOverrides, preferences } });
   await import('./chat-controller.js');
   await settle();
+  if (!keepArrival) document.querySelector('[data-modal-close]')?.click();
   return fake;
 }
 const submit = (text) => {
@@ -155,6 +185,11 @@ const submit = (text) => {
 const newChat = () => {
   $('file-menu-btn').click();
   $('file-new').click();
+};
+/** File > Config opens the Config popup. */
+const openConfig = () => {
+  $('file-menu-btn').click();
+  $('file-config').click();
 };
 /** File > Open opens the chat list. */
 const openChat = async () => {
@@ -225,7 +260,7 @@ describe('chat page', () => {
 
   it('has a New Chat button beside the connection badge that opens the same New conversation popup as File > New', async () => {
     await boot();
-    const right = document.querySelector('.toolbar-right');
+    const right = $('topbar-actions');
     expect(right.firstElementChild.classList.contains('badge')).toBe(true);
     expect(right.lastElementChild.id).toBe('new-chat');
     expect(right.lastElementChild.textContent).toBe('New Chat');
@@ -235,10 +270,61 @@ describe('chat page', () => {
     expect(field('agent') || modal().querySelector('select')).not.toBeNull();
   });
 
+  describe('the badge and New Chat in the top bar', () => {
+    it('take the avatar\'s place at the right end of the top bar, before the menu button', async () => {
+      await boot();
+      const end = document.querySelector('.top-end');
+      expect(document.querySelector('.avatar')).toBeNull(); // replaced on this page
+      expect(end.firstElementChild).toBe($('topbar-actions'));
+      expect(end.lastElementChild).toBe($('menu'));
+      expect(text($('topbar-actions').querySelector('.badge'))).toContain('Demo mode');
+      expect($('new-chat').closest('.topbar')).not.toBeNull();
+    });
+
+    it('leave the chat card with no header bar: the messages start at the top', async () => {
+      await boot();
+      const card = document.querySelector('.chat-card');
+      expect(card.querySelector('.chat-toolbar')).toBeNull();
+      expect(card.querySelector('.agent-icon')).toBeNull();
+      expect(card.firstElementChild.id).toBe('messages');
+      expect(card.lastElementChild.classList.contains('composer-area')).toBe(true);
+    });
+
+    it('are no longer in the chat card header', async () => {
+      await boot();
+      const card = document.querySelector('.chat-card');
+      expect(card.contains($('new-chat'))).toBe(false);
+      expect(card.querySelector('.badge')).toBeNull();
+      expect(document.querySelector('.toolbar-right')).toBeNull();
+    });
+
+    it('say API connected when an API is connected', async () => {
+      await boot({ appOverrides: { settings: { models: ['model-a', 'model-b', 'model-c'], connected: true, connections: [] } } });
+      expect(text($('topbar-actions').querySelector('.badge'))).toContain('API connected');
+    });
+
+    it('are drawn once and survive redraws', async () => {
+      await boot();
+      $('rewind').click();
+      document.querySelector('.modal-form').requestSubmit();
+      $('forward').click();
+      expect(document.querySelectorAll('#topbar-actions')).toHaveLength(1);
+      expect(document.querySelectorAll('#new-chat')).toHaveLength(1);
+      $('new-chat').click(); // still wired after the redraws
+      expect(modal()).not.toBeNull();
+    });
+
+    it('show the Locked badge first on a locked chat', async () => {
+      await boot({ config: { locked: true, lock_reason: 'user' } });
+      expect($('topbar-actions').firstElementChild.id).toBe('lock-badge');
+      expect($('topbar-actions').contains($('new-chat'))).toBe(true);
+    });
+  });
+
   it('renders the conversation, agents and models from the server', async () => {
     await boot();
     expect(document.querySelectorAll('.message')).toHaveLength(6);
-    expect(document.querySelector('.badge').textContent).toBe('3 turns');
+    expect(document.querySelector('#conversation-sidebar .badge').textContent).toBe('3 turns');
     expect($('conversation-name').textContent).toBe('Sample conversation');
     expect(chips()).toEqual({ AGENT: 'General assistant', MODEL: 'model-a', REASONING: 'Default (model decides)', TEMPERATURE: '0', 'KB SUMMARY TOOL': 'Off', 'BRIEF REPLIES': 'Off' });
     expect(document.querySelectorAll('.config-chips')).toHaveLength(0); // no chips any more: a bullet list
@@ -414,24 +500,846 @@ describe('chat page', () => {
     expect($('send').textContent).toContain('Send message');
   });
 
-  it('rewinds: the last prompt goes back into the composer', async () => {
-    const { server, mock } = await boot();
-    $('rewind').click();
-    await settle();
-    expect(mock.called('POST /api/conversations/:id/rewind')).toBe(true);
-    expect($('prompt').value).toBe('Can you turn that into a short project brief?');
-    expect(document.querySelectorAll('.message')).toHaveLength(4);
-    expect(server.conversation.messages).toHaveLength(4);
-    expect(toastText()).toBe('Stepped back one turn. Edit your prompt and try again.');
+  describe('Rewind, step mode and Start fork', () => {
+    const popupForm = () => document.querySelector('.modal-form');
+    const popupTitle = () => document.querySelector('.modal-head h2')?.textContent;
+    const confirm = async () => {
+      popupForm().requestSubmit();
+      await settle();
+    };
+    const cancel = () => document.querySelector('[data-modal-close]').click();
+    const rewind = async () => {
+      $('rewind').click();
+      await settle();
+    };
+    /** Rewind asks first ("Entering rewind mode"); confirm it. This only enters the mode: the view stays at the end. */
+    const enterRewindMode = async () => {
+      await rewind();
+      await confirm();
+    };
+    /** Enter rewind mode, then click Rewind once inside it: one prompt back. */
+    const rewindConfirmed = async () => {
+      await enterRewindMode();
+      await rewind();
+    };
+    const shownPrompts = () => messageCopies().filter((_, i) => i % 2 === 0);
+
+    it('says it is entering rewind mode before it starts', async () => {
+      await boot();
+      await rewind();
+      expect(popupTitle()).toBe('Entering rewind mode');
+      expect(text(modal())).toContain('Your current conversation is kept as it is.');
+      expect(text(modal())).toContain('Cancel to leave rewind mode');
+      expect(document.querySelector('.modal-form button[type="submit"]').textContent).toBe('Enter rewind mode');
+      expect(document.querySelectorAll('.message')).toHaveLength(6); // nothing moved yet
+      expect($('chat-form').dataset.step).toBe('false');
+    });
+
+    it('entering rewind mode does not step back: the view stays at the end until Rewind is clicked inside the mode', async () => {
+      const { mock } = await boot();
+      await enterRewindMode();
+      expect($('chat-form').dataset.step).toBe('true');
+      expect(document.querySelectorAll('.message')).toHaveLength(6); // nothing hidden yet
+      expect(text(document.querySelector('.composer-hint'))).toBe('Rewind mode · prompt 3 of 3. Click Start fork to continue from here, or Cancel.');
+      expect($('send').textContent).toContain('Start fork');
+      expect($('prompt').disabled).toBe(true);
+      expect($('forward').disabled).toBe(true); // already at the end
+      expect($('rewind').disabled).toBe(false);
+      expect($('rewind-cancel')).not.toBeNull();
+      await rewind(); // now the user steps back
+      expect(document.querySelectorAll('.message')).toHaveLength(4);
+      expect($('forward').disabled).toBe(false);
+      expect(mock.called('POST /api/conversations/:id/fork')).toBe(false);
+    });
+
+    it('Cancel leaves the view where it was', async () => {
+      await boot();
+      await rewind();
+      cancel();
+      expect(modal()).toBeNull();
+      expect(document.querySelectorAll('.message')).toHaveLength(6);
+      expect($('send').textContent).toContain('Send message');
+    });
+
+    it('steps back one prompt at a time, hiding what follows but deleting nothing', async () => {
+      const { server, mock } = await boot();
+      await rewindConfirmed();
+      expect(document.querySelectorAll('.message')).toHaveLength(4);
+      expect(server.conversation.messages).toHaveLength(6); // the conversation itself is unchanged
+      expect(mock.calls.some((c) => c.path.endsWith('/rewind'))).toBe(false); // no server call: it only moves the view
+      await rewind(); // the popup is only for the first step back
+      expect(modal()).toBeNull();
+      expect(document.querySelectorAll('.message')).toHaveLength(2);
+    });
+
+    it('never goes below one prompt', async () => {
+      await boot();
+      await rewindConfirmed();
+      await rewind();
+      expect($('rewind').disabled).toBe(true);
+      expect(text(document.querySelector('.composer-hint'))).toBe('Rewind mode · prompt 1 of 3. Click Start fork to continue from here, or Cancel.');
+    });
+
+    it('in step mode the textarea is disabled and Send says Start fork', async () => {
+      await boot();
+      await rewindConfirmed();
+      expect($('prompt').disabled).toBe(true);
+      expect($('prompt').placeholder).toBe('Start a fork to continue from here.');
+      expect($('send').textContent).toContain('Start fork');
+      expect($('send').disabled).toBe(false);
+      expect($('chat-form').dataset.step).toBe('true');
+      expect(text(document.querySelector('.composer-hint'))).toBe('Rewind mode · prompt 2 of 3. Click Start fork to continue from here, or Cancel.');
+      expect($('lock-chat').disabled).toBe(true);
+    });
+
+    it('hides the Compact button in rewind mode, and brings it back when the mode ends', async () => {
+      const { mock } = await boot();
+      expect($('compact-chat')).not.toBeNull();
+      expect($('compact-chat').disabled).toBe(false);
+      await enterRewindMode();
+      expect($('compact-chat')).toBeNull(); // not drawn at all, not just disabled
+      await rewind();
+      expect($('compact-chat')).toBeNull(); // still hidden while stepping
+      $('forward').click();
+      expect($('compact-chat')).toBeNull(); // and at the end of the mode
+      $('rewind-cancel').click();
+      expect($('compact-chat')).not.toBeNull();
+      expect($('compact-chat').disabled).toBe(false);
+      $('compact-chat').click(); // wired up again: it really compacts
+      await settle();
+      expect(mock.called('POST /api/conversations/:id/compact')).toBe(true);
+    });
+
+    it('brings Compact back after Start fork too', async () => {
+      await boot();
+      await rewindConfirmed();
+      expect($('compact-chat')).toBeNull();
+      $('chat-form').requestSubmit();
+      await confirm();
+      expect($('compact-chat')).not.toBeNull();
+    });
+
+    it('Forward steps toward the end, and reaching the end does not leave rewind mode', async () => {
+      await boot();
+      await rewindConfirmed();
+      await rewind();
+      expect($('forward').disabled).toBe(false);
+      $('forward').click();
+      expect(document.querySelectorAll('.message')).toHaveLength(4);
+      $('forward').click();
+      expect(document.querySelectorAll('.message')).toHaveLength(6); // every message is on screen again...
+      expect($('chat-form').dataset.step).toBe('true'); // ...and the mode goes on
+      expect($('send').textContent).toContain('Start fork');
+      expect($('prompt').disabled).toBe(true);
+      expect($('forward').disabled).toBe(true); // nothing further forward
+      expect($('rewind-cancel')).not.toBeNull();
+      expect(text(document.querySelector('.composer-hint'))).toBe('Rewind mode · prompt 3 of 3. Click Start fork to continue from here, or Cancel.');
+    });
+
+    it('shows a Cancel button next to Forward, only in rewind mode', async () => {
+      await boot();
+      expect($('rewind-cancel')).toBeNull();
+      expect($('forward')).toBeNull();
+      await rewindConfirmed();
+      expect($('forward').nextElementSibling).toBe($('rewind-cancel'));
+      expect(text($('rewind-cancel'))).toBe('Cancel');
+    });
+
+    it('lets the user move through every message, back and forth, without leaving rewind mode', async () => {
+      await boot();
+      await rewindConfirmed(); // 2 of 3
+      const seen = [];
+      const note = () => seen.push([document.querySelectorAll('.message').length, $('chat-form').dataset.step]);
+      await rewind(); note(); // 1 of 3
+      $('forward').click(); note(); // 2
+      $('forward').click(); note(); // 3
+      await rewind(); note(); // 2
+      await rewind(); note(); // 1
+      expect(seen).toEqual([[2, 'true'], [4, 'true'], [6, 'true'], [4, 'true'], [2, 'true']]);
+      expect(document.querySelector('.modal')).toBeNull(); // the popup is only for entering the mode
+      expect($('rewind').disabled).toBe(true); // the first prompt: nothing further back
+    });
+
+    it('Cancel leaves rewind mode: everything is back, nothing was sent or changed', async () => {
+      const { server, mock } = await boot();
+      await rewindConfirmed();
+      await rewind();
+      $('rewind-cancel').click();
+      expect($('chat-form').dataset.step).toBe('false');
+      expect(document.querySelectorAll('.message')).toHaveLength(6);
+      expect($('send').textContent).toContain('Send message');
+      expect($('prompt').disabled).toBe(false);
+      expect($('rewind-cancel')).toBeNull();
+      expect($('forward')).toBeNull();
+      expect(document.activeElement).toBe($('prompt'));
+      expect(mock.called('POST /api/conversations/:id/fork')).toBe(false);
+      expect(mock.called('POST /api/conversations/:id/messages')).toBe(false);
+      expect(server.conversation.conversation_id).toBe('c1');
+      expect(server.conversation.messages).toHaveLength(6);
+    });
+
+    it('the mode can be entered again after Cancel, and asks again', async () => {
+      await boot();
+      await rewindConfirmed();
+      $('rewind-cancel').click();
+      await rewind();
+      expect(popupTitle()).toBe('Entering rewind mode');
+    });
+
+    it('Start fork at the end of rewind mode copies the whole conversation, and leaves the mode', async () => {
+      const { mock, server } = await boot();
+      await rewindConfirmed();
+      $('forward').click(); // back at the last message, still in rewind mode
+      $('chat-form').requestSubmit();
+      expect(text(modal())).toContain('up to prompt 3 copied into it');
+      await confirm();
+      expect(mock.lastBody('POST /api/conversations/:id/fork')).toEqual({ through_message_id: 'm6' });
+      expect(server.conversation.conversation_id).toBe('fork-1');
+      expect($('chat-form').dataset.step).toBe('false');
+      expect($('send').textContent).toContain('Send message');
+      expect($('rewind-cancel')).toBeNull();
+    });
+
+    it('the buttons are off while a request is running', async () => {
+      await boot();
+      await rewindConfirmed();
+      const { setBusyUI } = await import('./chat-ui.js');
+      setBusyUI(true, true, () => {});
+      expect($('rewind-cancel').disabled).toBe(true);
+      expect($('rewind').disabled).toBe(true);
+      setBusyUI(false, true, null);
+      expect($('rewind-cancel').disabled).toBe(false);
+    });
+
+    it('asks "are you sure" before Start fork, and Cancel changes nothing', async () => {
+      const { mock } = await boot();
+      await rewindConfirmed();
+      $('chat-form').requestSubmit();
+      expect(popupTitle()).toBe('Start a fork from this point?');
+      expect(text(modal())).toContain('Are you sure you want to start the fork from this point?');
+      expect(text(modal())).toContain('up to prompt 2 copied into it');
+      cancel();
+      await settle();
+      expect(mock.called('POST /api/conversations/:id/fork')).toBe(false);
+      expect($('send').textContent).toContain('Start fork'); // still in step mode
+      expect(document.querySelectorAll('.message')).toHaveLength(4);
+    });
+
+    it('Start fork copies up to the point on screen, sends nothing, and gives back an enabled empty composer', async () => {
+      const { server, mock } = await boot();
+      await rewindConfirmed();
+      $('prompt').value = 'typed somewhere else';
+      $('chat-form').requestSubmit();
+      await confirm();
+      expect(mock.lastBody('POST /api/conversations/:id/fork')).toEqual({ through_message_id: 'm4' });
+      expect(mock.called('POST /api/conversations/:id/messages')).toBe(false); // Start fork never sends
+      expect(server.conversation.conversation_id).toBe('fork-1');
+      expect(document.querySelectorAll('.message')).toHaveLength(4);
+      expect($('send').textContent).toContain('Send message');
+      expect($('prompt').disabled).toBe(false);
+      expect($('prompt').value).toBe('');
+      expect(document.activeElement).toBe($('prompt'));
+      expect($('chat-form').dataset.step).toBe('false');
+      expect(text($('fork-note'))).toBe('Forked from Sample conversation');
+      expect(toastText()).toBe('Forked from Sample conversation.');
+      expect($('forward')).toBeNull();
+    });
+
+    it('after the fork the first prompt is an ordinary send to the new conversation', async () => {
+      const { mock } = await boot();
+      await rewindConfirmed();
+      $('chat-form').requestSubmit();
+      await confirm();
+      submit('what next');
+      await settle();
+      const sent = mock.calls.find((c) => c.key === 'POST /api/conversations/:id/messages');
+      expect(sent.path).toBe('/api/conversations/fork-1/messages');
+      expect(document.querySelectorAll('.message')).toHaveLength(6);
+    });
+
+    it('a failed fork keeps the popup open with the reason, and the view where it was', async () => {
+      const { server } = await boot();
+      server.failFork = apiError(409, 'prompt_in_progress', 'A prompt is still waiting for its reply. Wait for it, or stop it, first.');
+      await rewindConfirmed();
+      $('chat-form').requestSubmit();
+      await confirm();
+      expect(text(document.querySelector('.modal-error'))).toBe('A prompt is still waiting for its reply. Wait for it, or stop it, first.');
+      expect(modal()).not.toBeNull();
+      expect(server.conversation.conversation_id).toBe('c1');
+      expect($('send').textContent).toContain('Start fork');
+    });
+
+    it('a full conversation can still start a fork from a stepped-back view', async () => {
+      await boot({ config: { max_user_prompts: 3 } });
+      expect($('send').disabled).toBe(true);
+      await rewindConfirmed();
+      expect($('send').disabled).toBe(false); // forking is how a full conversation carries on
+      expect(text(document.querySelector('.composer-hint'))).not.toContain('full');
+    });
+
+    it('stays in step mode through a busy/idle cycle: the label and the textarea do not reset', async () => {
+      await boot();
+      await rewindConfirmed();
+      const { setBusyUI } = await import('./chat-ui.js');
+      setBusyUI(true, true, () => {});
+      expect($('send').textContent).toContain('Stop');
+      setBusyUI(false, true, null);
+      expect($('send').textContent).toContain('Start fork');
+      expect($('prompt').disabled).toBe(true);
+    });
+
+    it('opening another chat, or starting a new one, leaves step mode', async () => {
+      await boot({ otherChats: [{ conversation_id: 'c9', name: 'Another', agent_id: 'assistant', model: 'model-a', reasoning_level: 'default', prompt_count: 1, messages: [msg(1, 'user', 'hi'), msg(2, 'assistant', 'hello')], locked: false }] });
+      await rewindConfirmed();
+      await openChat();
+      modal().querySelector('input[value="c9"]').checked = true;
+      modal().querySelector('form').requestSubmit();
+      await settle();
+      expect($('chat-form').dataset.step).toBe('false');
+      expect($('send').textContent).toContain('Send message');
+    });
   });
 
-  it('shows the server message when there is nothing to rewind', async () => {
-    const { server } = await boot({ messages: [], isSample: false });
-    server.conversation.messages = [];
-    $('rewind').disabled = false;
-    $('rewind').click();
-    await settle();
-    expect(toastText()).toBe('There is no prompt to rewind.');
+  describe('the conversation name in the top bar', () => {
+    it('sits to the right of the File menu, not in the chat card', async () => {
+      await boot();
+      const title = $('topbar-title');
+      expect(title).not.toBeNull();
+      expect(title.parentElement.classList.contains('topbar')).toBe(true);
+      expect($('topbar-file').nextElementSibling).toBe(title);
+      expect(title.contains($('conversation-name'))).toBe(true);
+      expect(title.contains($('rename-chat'))).toBe(true);
+      expect(text($('conversation-name'))).toBe('Sample conversation');
+      expect(document.querySelector('.chat-card').contains($('conversation-name'))).toBe(false);
+      expect(document.querySelector('.chat-card').contains($('rename-chat'))).toBe(false);
+    });
+
+    it('is drawn once and kept up to date as the page redraws', async () => {
+      await boot();
+      $('rewind').click();
+      document.querySelector('.modal-form').requestSubmit();
+      $('forward').click();
+      expect(document.querySelectorAll('#topbar-title')).toHaveLength(1);
+      expect(document.querySelectorAll('#conversation-name')).toHaveLength(1);
+    });
+
+    it('follows a rename, and Rename still works from the top bar', async () => {
+      await boot();
+      $('rename-chat').click();
+      field('name').value = 'Renamed from the bar';
+      modal().querySelector('form').requestSubmit();
+      await settle();
+      expect(text($('conversation-name'))).toBe('Renamed from the bar');
+      expect($('topbar-file').nextElementSibling.id).toBe('topbar-title');
+    });
+
+    it('shows where a fork came from under the name', async () => {
+      await boot({ config: { forked_from_conversation_id: 'c0', forked_from_name: 'The source' } });
+      expect(text($('topbar-title').querySelector('#fork-note'))).toBe('Forked from The source');
+    });
+  });
+
+  describe('Config', () => {
+    const OFF_ON = { show_compact_button: false, show_rewind_button: true }; // what a new user has
+    const flip = async (name) => {
+      const input = modal().querySelector(`input[name="${name}"]`);
+      input.checked = !input.checked;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await settle();
+      return input;
+    };
+
+    it('opens from File > Config as a popup with two switches and no "locked" text', async () => {
+      await boot({ appOverrides: { preferences: OFF_ON } });
+      openConfig();
+      expect(modal().querySelector('h2').textContent).toBe('Config');
+      expect(modal().textContent).not.toContain('Locked for educational purposes');
+      expect(modal().textContent).not.toContain('Start a new chat for different settings');
+      const switches = [...modal().querySelectorAll('input.ios-switch')];
+      expect(switches.map((i) => [i.name, i.getAttribute('role'), i.type])).toEqual([['compact', 'switch', 'checkbox'], ['rewind', 'switch', 'checkbox']]);
+      expect(text(modal().querySelector('label[for="config-compact"]'))).toBe('Show Compact button');
+      expect(text(modal().querySelector('label[for="config-rewind"]'))).toBe('Show Rewind button');
+      expect(modal().querySelectorAll('.modal-actions button')).toHaveLength(1); // just OK
+      expect(modal().querySelector('.modal-actions button').textContent).toBe('OK');
+    });
+
+    it('defaults: Compact off, Rewind on', async () => {
+      await boot({ appOverrides: { preferences: OFF_ON } });
+      expect($('compact-chat')).toBeNull();
+      expect($('rewind')).not.toBeNull();
+      openConfig();
+      expect(modal().querySelector('input[name="compact"]').checked).toBe(false);
+      expect(modal().querySelector('input[name="rewind"]').checked).toBe(true);
+    });
+
+    it('turning Compact on shows the button at once and saves the choice', async () => {
+      const { mock } = await boot({ appOverrides: { preferences: OFF_ON } });
+      openConfig();
+      await flip('compact');
+      expect($('compact-chat')).not.toBeNull();
+      expect(mock.lastBody('PUT /api/preferences')).toEqual({ show_compact_button: true });
+      expect(modal()).not.toBeNull(); // the popup stays until OK
+    });
+
+    it('turning Compact off again hides it', async () => {
+      const { mock } = await boot({ appOverrides: { preferences: { show_compact_button: true } } });
+      expect($('compact-chat')).not.toBeNull();
+      openConfig();
+      await flip('compact');
+      expect($('compact-chat')).toBeNull();
+      expect(mock.lastBody('PUT /api/preferences')).toEqual({ show_compact_button: false });
+    });
+
+    it('turning Rewind off hides the Rewind button and saves it; on brings it back', async () => {
+      const { mock } = await boot({ appOverrides: { preferences: OFF_ON } });
+      openConfig();
+      await flip('rewind');
+      expect($('rewind')).toBeNull();
+      expect(mock.lastBody('PUT /api/preferences')).toEqual({ show_rewind_button: false });
+      await flip('rewind');
+      expect($('rewind')).not.toBeNull();
+      expect(mock.lastBody('PUT /api/preferences')).toEqual({ show_rewind_button: true });
+    });
+
+    it('the two switches are independent', async () => {
+      await boot({ appOverrides: { preferences: OFF_ON } });
+      openConfig();
+      await flip('compact');
+      expect($('rewind')).not.toBeNull();
+      await flip('rewind');
+      expect($('compact-chat')).not.toBeNull();
+      expect($('rewind')).toBeNull();
+    });
+
+    it('OK closes the popup and keeps the choices', async () => {
+      await boot({ appOverrides: { preferences: OFF_ON } });
+      openConfig();
+      await flip('compact');
+      modal().querySelector('form').requestSubmit();
+      await settle();
+      expect(modal()).toBeNull();
+      expect($('compact-chat')).not.toBeNull();
+    });
+
+    it('is remembered: a page that loads with the saved preferences shows the buttons they ask for', async () => {
+      await boot({ appOverrides: { preferences: { show_compact_button: true, show_rewind_button: false } } });
+      expect($('compact-chat')).not.toBeNull();
+      expect($('rewind')).toBeNull();
+      openConfig();
+      expect(modal().querySelector('input[name="compact"]').checked).toBe(true);
+      expect(modal().querySelector('input[name="rewind"]').checked).toBe(false);
+    });
+
+    it('when saving fails the switch goes back, the page goes back, and the popup says why', async () => {
+      const { server } = await boot({ appOverrides: { preferences: OFF_ON } });
+      server.failPrefs = apiError(500, 'oops', 'The server hit a problem.');
+      openConfig();
+      const input = await flip('compact');
+      expect(input.checked).toBe(false);
+      expect($('compact-chat')).toBeNull();
+      expect(text(modal().querySelector('.modal-error'))).toBe('The server hit a problem.');
+    });
+
+    it('a switch changed while a reply is on its way waits for the reply, then shows', async () => {
+      const { server } = await boot({ messages: [], isSample: false, appOverrides: { preferences: OFF_ON } });
+      server.hold = true;
+      submit('first');
+      await settle();
+      openConfig();
+      await flip('compact');
+      expect($('send').textContent).toContain('Stop'); // the busy page was not redrawn under the user
+      server.release();
+      await settle();
+      expect($('compact-chat')).not.toBeNull();
+    });
+
+    it('rewind mode keeps its own buttons even when the Rewind button is switched off', async () => {
+      await boot();
+      $('rewind').click();
+      document.querySelector('.modal-form').requestSubmit(); // entering rewind mode
+      openConfig();
+      await flip('rewind');
+      expect($('rewind')).not.toBeNull(); // it steps back inside the mode
+      expect($('forward')).not.toBeNull();
+      expect($('rewind-cancel')).not.toBeNull();
+      modal().querySelector('form').requestSubmit();
+      $('rewind-cancel').click();
+      expect($('rewind')).toBeNull(); // out of the mode, the switch is respected
+    });
+  });
+
+  describe('returning to the page', () => {
+    const popupTitle = () => document.querySelector('.modal-head h2')?.textContent;
+    const choices = () => [...document.querySelectorAll('[data-choice]')];
+
+    it('asks whether to open a chat or start a new one, with those two options', async () => {
+      await boot({ keepArrival: true });
+      expect(popupTitle()).toBe('Welcome back');
+      expect(choices().map((b) => [b.dataset.choice, b.textContent])).toEqual([['open', 'Open Chat'], ['new', 'New Chat']]);
+    });
+
+    it('Open Chat opens the list of chats', async () => {
+      const { server } = await boot({ keepArrival: true });
+      server.otherChats = [{ conversation_id: 'c9', name: 'Earlier chat', agent_id: 'assistant', model: 'model-a', reasoning_level: 'default', prompt_count: 1, locked: false, messages: [] }];
+      choices()[0].click();
+      await settle();
+      expect(popupTitle()).toBe('Open a chat');
+      expect(modal().textContent).toContain('Earlier chat');
+    });
+
+    it('New Chat opens the New conversation popup', async () => {
+      await boot({ keepArrival: true });
+      choices()[1].click();
+      await settle();
+      expect(popupTitle()).toBe('New conversation');
+      expect(field('name')).not.toBeNull();
+    });
+
+    it('dismissing it keeps the chat that was on screen', async () => {
+      const { mock } = await boot({ keepArrival: true });
+      document.querySelector('[data-modal-close]').click();
+      await settle();
+      expect(modal()).toBeNull();
+      expect(text($('conversation-name'))).toBe('Sample conversation');
+      expect(document.querySelectorAll('.message')).toHaveLength(6);
+      expect(mock.called('GET /api/conversations')).toBe(false); // nothing was asked for until the user picks
+    });
+
+    it('Escape dismisses it too', async () => {
+      await boot({ keepArrival: true });
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await settle();
+      expect(modal()).toBeNull();
+    });
+
+    it('opens once per visit, not again after a chat is started', async () => {
+      await boot({ keepArrival: true });
+      choices()[1].click();
+      await settle();
+      field('name').value = 'Started from the popup';
+      modal().querySelector('form').requestSubmit();
+      await settle();
+      expect(text($('conversation-name'))).toBe('Started from the popup');
+      expect(document.querySelector('[data-choice]')).toBeNull();
+      expect(popupTitle()).toBeUndefined();
+    });
+  });
+
+  describe('Delete', () => {
+    const deleteButton = () => $('delete-chat');
+    const popupTitle = () => document.querySelector('.modal-head h2')?.textContent;
+    const confirmDelete = async () => {
+      document.querySelector('.modal-form').requestSubmit();
+      await settle();
+    };
+
+    it('has a trash can at the right edge of the Settings title, with a tooltip', async () => {
+      await boot();
+      const wrap = document.querySelector('.side-settings-wrap');
+      expect(wrap).not.toBeNull();
+      expect(wrap.contains($('side-settings'))).toBe(true);
+      expect(wrap.contains(deleteButton())).toBe(true);
+      expect($('side-settings').contains(deleteButton())).toBe(false); // outside the <details>, so it stays when Settings is closed
+      expect(deleteButton().previousElementSibling).toBe($('side-settings'));
+      expect(deleteButton().dataset.tip).toBe('Delete this chat');
+      expect(deleteButton().getAttribute('aria-label')).toBe('Delete this chat');
+      expect(deleteButton().classList.contains('tooltip')).toBe(true);
+      expect(deleteButton().querySelector('svg')).not.toBeNull();
+    });
+
+    it('is still there when Settings is collapsed', async () => {
+      await boot();
+      $('side-settings').open = false;
+      expect(deleteButton().isConnected).toBe(true);
+      expect(deleteButton().disabled).toBe(false);
+    });
+
+    it('opens a popup that warns it can not be undone and asks to confirm', async () => {
+      await boot();
+      deleteButton().click();
+      expect(popupTitle()).toBe('Delete this chat?');
+      expect(text(modal())).toContain('Warning: deleting this chat can not be undone. Confirm deletion to continue.');
+      expect(document.querySelector('.modal-form button[type="submit"]').textContent).toBe('Confirm deletion');
+    });
+
+    it('Cancel deletes nothing', async () => {
+      const { mock } = await boot();
+      deleteButton().click();
+      document.querySelector('[data-modal-close]').click();
+      await settle();
+      expect(mock.called('DELETE /api/conversations/:id')).toBe(false);
+      expect(modal()).toBeNull();
+      expect(text($('conversation-name'))).toBe('Sample conversation');
+    });
+
+    it('confirming deletes the chat, clears the interface and opens the New conversation popup', async () => {
+      const { server, mock } = await boot();
+      deleteButton().click();
+      await confirmDelete();
+      expect(mock.calls.find((c) => c.key === 'DELETE /api/conversations/:id').path).toBe('/api/conversations/c1');
+      expect(server.deleted).toEqual(['c1']);
+      expect(toastText()).toBe('Chat deleted.');
+      // the interface is cleared: no chat, no messages, nothing to type into
+      expect(text($('conversation-name'))).toBe('No chat open');
+      expect(document.querySelectorAll('.message')).toHaveLength(0);
+      expect(text(document.querySelector('.empty'))).toContain('No chat open.');
+      expect($('prompt').disabled).toBe(true);
+      expect($('prompt').placeholder).toBe('Start a new chat with File > New.');
+      expect($('send').disabled).toBe(true);
+      expect(deleteButton().disabled).toBe(true);
+      expect($('lock-chat').disabled).toBe(true);
+      expect($('rename-chat').disabled).toBe(true);
+      expect($('chat-api-log').disabled).toBe(true);
+      expect(text(document.querySelector('.side-settings-wrap'))).toContain('No chat open.');
+      // and the New conversation popup is open
+      expect(popupTitle()).toBe('New conversation');
+      expect(mock.count('GET /api/conversations/current')).toBe(1); // no other chat was loaded in its place
+    });
+
+    it('the New conversation popup after a deletion does not offer the deleted chat\'s settings', async () => {
+      await boot();
+      deleteButton().click();
+      await confirmDelete();
+      expect(modal().querySelector('#use-chat-settings')).toBeNull();
+      expect(field('name')).not.toBeNull();
+    });
+
+    it('Cancel on that popup leaves the cleared interface, and New Chat still works from there', async () => {
+      const { mock } = await boot();
+      deleteButton().click();
+      await confirmDelete();
+      document.querySelector('[data-modal-close]').click();
+      expect(modal()).toBeNull();
+      expect(text($('conversation-name'))).toBe('No chat open');
+      submit('typed anyway');
+      await settle();
+      expect(mock.called('POST /api/conversations/:id/messages')).toBe(false); // there is no chat to send to
+      $('new-chat').click();
+      expect(popupTitle()).toBe('New conversation');
+    });
+
+    it('starting a chat from that popup fills the interface and opens the composer', async () => {
+      const { server, mock } = await boot();
+      deleteButton().click();
+      await confirmDelete();
+      field('name').value = 'After the delete';
+      modal().querySelector('form').requestSubmit();
+      await settle();
+      expect(mock.called('POST /api/conversations')).toBe(true);
+      expect(text($('conversation-name'))).toBe('After the delete');
+      expect($('prompt').disabled).toBe(false);
+      expect(deleteButton().disabled).toBe(false);
+      submit('first prompt in the new chat');
+      await settle();
+      expect(mock.calls.find((c) => c.key === 'POST /api/conversations/:id/messages').path).toBe('/api/conversations/c2/messages');
+      expect(server.conversation.messages).toHaveLength(2);
+    });
+
+    it('leaves step mode when the chat is deleted', async () => {
+      await boot();
+      $('rewind').click();
+      document.querySelector('.modal-form').requestSubmit();
+      expect($('chat-form').dataset.step).toBe('true');
+      deleteButton().click();
+      await confirmDelete();
+      expect($('chat-form').dataset.step).toBe('false');
+      expect($('send').textContent).toContain('Send message');
+    });
+
+    it('keeps the popup open with the reason when the server refuses', async () => {
+      const { server } = await boot();
+      server.failDelete = apiError(404, 'not_found', 'Conversation not found.');
+      deleteButton().click();
+      await confirmDelete();
+      expect(text(document.querySelector('.modal-error'))).toBe('Conversation not found.');
+      expect(modal()).not.toBeNull();
+      expect(text($('conversation-name'))).toBe('Sample conversation');
+    });
+
+    it('is disabled while a reply is on its way', async () => {
+      const { server } = await boot({ messages: [], isSample: false });
+      server.hold = true;
+      submit('first');
+      await settle();
+      expect(deleteButton().disabled).toBe(true);
+      server.release();
+      await settle();
+      expect(deleteButton().disabled).toBe(false);
+    });
+  });
+
+  describe('Lock', () => {
+    const popupForm = () => document.querySelector('.modal-form');
+    const popupTitle = () => document.querySelector('.modal-head h2')?.textContent;
+    const lockButton = () => $('lock-chat');
+
+    it('has a lock button next to Send, with a tooltip', async () => {
+      await boot();
+      expect(lockButton()).not.toBeNull();
+      expect(lockButton().classList.contains('tooltip')).toBe(true);
+      expect(lockButton().dataset.tip).toBe('Lock this conversation');
+      expect(lockButton().getAttribute('aria-label')).toBe('Lock this conversation');
+      expect(lockButton().nextElementSibling).toBe($('send'));
+      expect(lockButton().querySelector('svg')).not.toBeNull();
+    });
+
+    it('is disabled until there is an answered prompt, and while a reply is on its way', async () => {
+      const { server } = await boot({ messages: [], isSample: false });
+      expect(lockButton().disabled).toBe(true);
+      server.hold = true;
+      submit('first');
+      await settle();
+      expect(lockButton().disabled).toBe(true);
+      server.release();
+      await settle();
+      expect(lockButton().disabled).toBe(false); // now there is an answered prompt
+    });
+
+    it('opens a popup that says no more prompts can be added but it stays available for replay', async () => {
+      await boot();
+      lockButton().click();
+      expect(popupTitle()).toBe('Lock this conversation?');
+      expect(text(modal())).toContain('You will not be able to add more prompts to this conversation.');
+      expect(text(modal())).toContain('It will still be available for replay.');
+    });
+
+    it('Cancel locks nothing', async () => {
+      const { mock } = await boot();
+      lockButton().click();
+      document.querySelector('[data-modal-close]').click();
+      await settle();
+      expect(mock.called('POST /api/conversations/:id/lock')).toBe(false);
+      expect($('chat-form').dataset.locked).toBe('false');
+    });
+
+    it('confirming locks it: the composer closes, and a banner offers to fork', async () => {
+      const { mock } = await boot();
+      lockButton().click();
+      popupForm().requestSubmit();
+      await settle();
+      expect(mock.called('POST /api/conversations/:id/lock')).toBe(true);
+      expect(toastText()).toBe('Conversation locked.');
+      expect($('chat-form').dataset.locked).toBe('true');
+      expect($('prompt').disabled).toBe(true);
+      expect($('prompt').placeholder).toBe('This conversation is locked.');
+      expect($('send').disabled).toBe(true);
+      expect(lockButton().disabled).toBe(true);
+      expect($('lock-badge')).not.toBeNull();
+      expect(text(document.querySelector('.lock-banner'))).toContain('This conversation is locked.');
+      expect($('fork-continue')).not.toBeNull();
+      expect($('rewind').disabled).toBe(false); // stepping back and starting a fork is the way on
+    });
+
+    it('shows the reason in the popup when the server refuses', async () => {
+      const { server } = await boot();
+      server.failLock = apiError(409, 'prompt_in_progress', 'A prompt is still waiting for its reply. Wait for it, or stop it, first.');
+      lockButton().click();
+      popupForm().requestSubmit();
+      await settle();
+      expect(text(document.querySelector('.modal-error'))).toBe('A prompt is still waiting for its reply. Wait for it, or stop it, first.');
+      expect($('chat-form').dataset.locked).toBe('false');
+    });
+
+    it('Fork to continue asks first, then copies the whole conversation into an open one', async () => {
+      const { mock } = await boot({ config: { locked: true, lock_reason: 'replay' } });
+      $('fork-continue').click();
+      expect(popupTitle()).toBe('This conversation is locked');
+      popupForm().requestSubmit();
+      await settle();
+      expect(mock.lastBody('POST /api/conversations/:id/fork')).toEqual({});
+      expect($('chat-form').dataset.locked).toBe('false');
+      expect($('prompt').disabled).toBe(false);
+      expect($('lock-badge')).toBeNull();
+      expect(document.querySelector('.lock-banner')).toBeNull();
+    });
+
+    it('a send refused because it was locked elsewhere shows the reason and does not keep the prompt', async () => {
+      const { server } = await boot();
+      server.conversation.locked = true; // locked in another tab after this page loaded
+      submit('too late');
+      await settle();
+      expect(toastText()).toContain('This conversation is locked.');
+      expect(messageCopies()).not.toContain('too late');
+      expect($('chat-form').dataset.locked).toBe('true');
+    });
+  });
+
+  describe('a locked conversation', () => {
+    const locked = { locked: true, lock_reason: 'user' };
+    const popupTitle = () => document.querySelector('.modal-head h2')?.textContent;
+
+    it('landing on one shows the Welcome back choice, not the fork notice; dismissing it leaves the chat read-only with a banner', async () => {
+      const { mock } = await boot({ config: locked, keepArrival: true });
+      expect(popupTitle()).toBe('Welcome back');
+      document.querySelector('[data-modal-close]').click();
+      expect(mock.called('POST /api/conversations/:id/fork')).toBe(false);
+      expect($('prompt').disabled).toBe(true);
+      expect($('send').disabled).toBe(true);
+      expect(text(document.querySelector('.composer-hint'))).toBe('Locked: replay it, or fork it to keep going.');
+      expect($('fork-continue')).not.toBeNull(); // the banner is how a locked chat is continued
+      expect(document.querySelectorAll('.message').length).toBeGreaterThan(0); // it can still be read
+    });
+
+    it('the banner\'s Fork to continue asks first, then creates the fork', async () => {
+      const { server } = await boot({ config: locked });
+      $('fork-continue').click();
+      expect(popupTitle()).toBe('This conversation is locked');
+      document.querySelector('.modal-form').requestSubmit();
+      await settle();
+      expect(server.conversation.conversation_id).toBe('fork-1');
+      expect($('prompt').disabled).toBe(false);
+    });
+
+    it('an open conversation shows no notice and no banner', async () => {
+      await boot();
+      expect(modal()).toBeNull();
+      expect(document.querySelector('.lock-banner')).toBeNull();
+      expect($('lock-badge')).toBeNull();
+    });
+
+    it('opening a locked chat from File > Open shows the fork notice and does not open it', async () => {
+      const { server, mock } = await boot({
+        otherChats: [{ conversation_id: 'c9', name: 'Old plan', agent_id: 'assistant', model: 'model-a', reasoning_level: 'default', prompt_count: 1, locked: true, messages: [msg(1, 'user', 'hi'), msg(2, 'assistant', 'hello')] }],
+      });
+      await openChat();
+      expect(text(modal())).toContain('Locked');
+      modal().querySelector('input[value="c9"]').checked = true;
+      modal().querySelector('form').requestSubmit();
+      await settle();
+      expect(popupTitle()).toBe('This conversation is locked');
+      expect(mock.called('POST /api/conversations/:id/open')).toBe(false); // a locked chat is not even touched by opening
+      document.querySelector('[data-modal-close]').click();
+      expect(server.conversation.conversation_id).toBe('c1'); // Cancel stays where it was
+    });
+
+    it('Create fork from File > Open forks that chat, and the fork is the one on screen', async () => {
+      const { server, mock } = await boot({
+        otherChats: [{ conversation_id: 'c9', name: 'Old plan', agent_id: 'assistant', model: 'model-a', reasoning_level: 'default', prompt_count: 1, locked: true, messages: [msg(1, 'user', 'hi'), msg(2, 'assistant', 'hello')] }],
+      });
+      await openChat();
+      modal().querySelector('input[value="c9"]').checked = true;
+      modal().querySelector('form').requestSubmit();
+      await settle();
+      document.querySelector('.modal-form').requestSubmit();
+      await settle();
+      expect(mock.calls.find((c) => c.key === 'POST /api/conversations/:id/fork').path).toBe('/api/conversations/c9/fork');
+      expect(server.conversation.name).toBe('Old plan (fork)');
+      expect(text($('conversation-name'))).toBe('Old plan (fork)');
+      expect(toastText()).toBe('Forked from Old plan.');
+    });
+
+    it('the picker marks locked chats and forks', async () => {
+      await boot({
+        otherChats: [
+          { conversation_id: 'c8', name: 'Source', agent_id: 'assistant', model: 'model-a', reasoning_level: 'default', prompt_count: 1, locked: true, messages: [] },
+          { conversation_id: 'c9', name: 'Branch', agent_id: 'assistant', model: 'model-a', reasoning_level: 'default', prompt_count: 1, locked: false, forked_from_conversation_id: 'c8', messages: [] },
+        ],
+      });
+      await openChat();
+      const rows = [...modal().querySelectorAll('.chat-option')].map((r) => r.textContent);
+      expect(rows.find((r) => r.includes('Source'))).toContain('Locked');
+      expect(rows.find((r) => r.includes('Branch'))).toContain('Fork of Source');
+    });
   });
 
   it('starts a new chat from the popup: name, agent, model, reasoning level and the KB summary tool', async () => {
@@ -598,10 +1506,10 @@ describe('chat page', () => {
       expect(prompt.disabled).toBe(true);
       expect(prompt.placeholder).toBe('This conversation is full. Start a new one with File > New.');
       expect(send.disabled).toBe(true);
-      expect(text(hint)).toBe('3 of 3 prompts: this conversation is full. Start a new one with File > New, or Rewind to step back.');
+      expect(text(hint)).toBe('3 of 3 prompts: this conversation is full. Start a new one with File > New, or Rewind and start a fork.');
       expect(hint.classList.contains('full')).toBe(true);
       expect($('chat-form').dataset.full).toBe('true');
-      expect($('rewind').disabled).toBe(false); // stepping back frees a slot
+      expect($('rewind').disabled).toBe(false); // stepping back and starting a fork is the way on
     });
 
     it('does not send when a prompt is submitted to a full conversation, and says why', async () => {
@@ -625,14 +1533,18 @@ describe('chat page', () => {
       expect(composer().send.disabled).toBe(true);
     });
 
-    it('opens the composer again after Rewind frees a slot', async () => {
+    it('a full conversation carries on in a fork: Rewind, Start fork, and the composer is open again', async () => {
       await boot({ config: { max_user_prompts: 3 } });
       expect(composer().prompt.disabled).toBe(true);
       $('rewind').click();
+      document.querySelector('.modal-form').requestSubmit(); // entering rewind mode asks first (it does not step back)
+      $('rewind').click(); // now step back one prompt
+      $('chat-form').requestSubmit();
+      document.querySelector('.modal-form').requestSubmit();
       await settle();
       expect(text(composer().hint)).toContain('2 of 3 prompts');
       expect(composer().prompt.disabled).toBe(false);
-      expect(composer().prompt.value).toBe('Can you turn that into a short project brief?'); // the stepped-back prompt, ready to edit
+      expect(composer().prompt.value).toBe('');
     });
 
     it('stays closed while a reply is on its way and after it, when that reply fills the conversation', async () => {

@@ -285,21 +285,6 @@ def test_only_answered_turns_are_fed_back(chat):
     assert "Cloud > IAM" not in hint
 
 
-def test_a_rewound_prompts_choices_are_forgotten(chat, kb_db):
-    client, cid, stub = chat
-    ScriptedModel(stub)
-    send(client, cid, content="question one", request_id="req-keep-00001")
-    ScriptedModel(stub, choices={"category": 2})
-    send(client, cid, content="question two", request_id="req-drop-00002")
-    assert {r[4] for r in rows(kb_db)} == {"req-keep-00001", "req-drop-00002"}
-    client.post(f"/api/conversations/{cid}/rewind")
-    assert {r[4] for r in rows(kb_db)} == {"req-keep-00001"}
-    ScriptedModel(stub)
-    stub.calls.clear()
-    send(client, cid, content="question two again")
-    assert "you chose: Networks > Segmentation > net.txt." in router_calls(stub)[0]["messages"][0]["content"]
-
-
 def test_no_hint_when_the_earlier_turn_chose_nothing(chat):
     client, cid, stub = chat
     ScriptedModel(stub, choices={"category": None})

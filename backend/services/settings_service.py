@@ -322,6 +322,8 @@ def _view(prefs: UserPreferences) -> PreferencesView:
         model=prefs.model,
         chat_sidebar_hidden=prefs.chat_sidebar_hidden,
         replay_prompts_hidden=prefs.replay_prompts_hidden,
+        show_compact_button=prefs.show_compact_button,
+        show_rewind_button=prefs.show_rewind_button,
     )
 
 
@@ -341,7 +343,7 @@ async def update_preferences(settings: Settings, user: User, request: UpdatePref
         if changes["agent_id"] is None:
             raise validation_error("agent_id cannot be null.")
         await require_agent(settings, changes["agent_id"])
-    for field in ("chat_sidebar_hidden", "replay_prompts_hidden"):
+    for field in ("chat_sidebar_hidden", "replay_prompts_hidden", "show_compact_button", "show_rewind_button"):
         if field in changes and changes[field] is None:
             raise validation_error(f"{field} cannot be null.")
     await preferences_repository.update(settings.DATABASE_PATH, user.user_id, changes)

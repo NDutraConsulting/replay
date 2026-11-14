@@ -45,6 +45,7 @@ from repositories import (
     replay_run_repository,
 )
 from services import (
+    conversation_service,
     demo_response_service,
     history_service,
     kb_routing_service,
@@ -435,6 +436,11 @@ async def step(settings: Settings, user: User, run_id: str, request: StepRequest
         raise conflict("step_in_progress", "A step is already running for this replay.")
 
     try:
+        if run.cursor == 0 and run.source_conversation_id:
+            # the first step of a replay of a conversation locks that conversation, so the source can no longer change
+            # under its replays. It is after the claim (a stale, stopped or busy step never locks) and before any model
+            # call; if it fails the step fails and the claim is released below.
+            await conversation_service.lock_for_replay(settings, user, run.source_conversation_id)
         agent = await settings_service.require_agent(settings, run.agent_id)
         existing = await replay_run_repository.list_results(settings.DATABASE_PATH, run_id)
         traces = await kb_choice_repository.trace_for_replay(settings.KNOWLEDGE_DB_PATH, user.user_id, run_id)

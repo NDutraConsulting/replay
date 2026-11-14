@@ -4,7 +4,7 @@ import json
 import sqlite3
 from datetime import UTC, datetime
 
-from db.connection import run_in_db
+from db.connection import run_in_log_db
 
 
 def _now() -> str:
@@ -32,8 +32,10 @@ def call_values(call: dict) -> tuple:
     )
 
 
-def call_from_row(r: sqlite3.Row) -> dict:
-    """A logged call, as the API log returns it (the same for a replay's calls and a chat's)."""
+def call_from_row(r: sqlite3.Row, status_column: str = "response_status") -> dict:
+    """A logged call, as the API log returns it (the same for a replay's calls and a chat's). `status_column` names the
+    column holding the HTTP status: `response_status` in the replay tables, `http_status` in the chat tables (where
+    `response_status` is the outcome of the call)."""
     return {
         "at": r["called_at"],
         "purpose": r["purpose"],
@@ -42,9 +44,9 @@ def call_from_row(r: sqlite3.Row) -> dict:
         "duration_ms": r["duration_ms"],
         "request": {"headers": json.loads(r["request_headers_json"]), "body": json.loads(r["request_body_json"])},
         "response": None
-        if r["response_status"] is None
+        if r[status_column] is None
         else {
-            "status": r["response_status"],
+            "status": r[status_column],
             "body": r["response_body"] or "",
             "truncated": bool(r["response_truncated"]),
         },
@@ -94,7 +96,7 @@ async def record_turn(db_path: str, user_id: str, run_id: str, slot: str, turn_i
                 ),
             )
 
-    await run_in_db(db_path, _run)
+    await run_in_log_db(db_path, _run)
 
 
 async def turns_for(db_path: str, user_id: str, run_id: str, slot: str) -> dict[int, list[dict]]:
@@ -117,7 +119,7 @@ async def turns_for(db_path: str, user_id: str, run_id: str, slot: str) -> dict[
             turns.setdefault(r["turn_index"], []).append(call_from_row(r))
         return turns
 
-    return await run_in_db(db_path, _run)
+    return await run_in_log_db(db_path, _run)
 
 
 async def answer_logprobs(db_path: str, user_id: str, run_id: str, slot: str) -> dict[int, list[dict] | None]:
@@ -141,7 +143,7 @@ async def answer_logprobs(db_path: str, user_id: str, run_id: str, slot: str) ->
             turns[r["turn_index"]] = json.loads(r["logprobs_json"])
         return turns
 
-    return await run_in_db(db_path, _run)
+    return await run_in_log_db(db_path, _run)
 
 
 async def delete_runs(db_path: str, user_id: str, run_ids: list[str]) -> None:
@@ -154,4 +156,4 @@ async def delete_runs(db_path: str, user_id: str, run_ids: list[str]) -> None:
         for table in ("api_calls", "api_log_turns"):
             conn.execute(f"DELETE FROM {table} WHERE user_id = ? AND replay_run_id IN ({marks})", (user_id, *run_ids))
 
-    await run_in_db(db_path, _run)
+    await run_in_log_db(db_path, _run)
