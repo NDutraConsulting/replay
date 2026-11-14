@@ -1,0 +1,25 @@
+/* The lesson layer sits above popups (.modal-overlay is z-index 60) and below nothing the user needs. */
+.lesson-layer{position:fixed;inset:0;z-index:100;pointer-events:none}
+.lesson-dim{position:fixed;background:rgba(23,25,22,.62);pointer-events:auto}
+.lesson-ring{position:fixed;border-radius:10px;border:2px solid var(--yellow);box-shadow:0 0 0 4px rgba(245,197,24,.3);pointer-events:none;animation:lesson-pulse 1.6s ease-in-out infinite}
+.lesson-card{position:fixed;pointer-events:auto;box-sizing:border-box;width:min(400px,calc(100vw - 32px));display:grid;grid-template-columns:auto 1fr;gap:6px 14px;align-items:start;padding:16px;border-radius:14px;background:#fff;color:var(--ink);box-shadow:0 12px 40px rgba(0,0,0,.35);outline:none}
+.lesson-avatar{width:104px;height:auto;max-height:130px;object-fit:contain;animation:lesson-bob 2.4s ease-in-out infinite}
+.lesson-text{min-width:0}
+.lesson-kicker{margin:0 0 2px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;opacity:.65}
+.lesson-title{margin:0 0 6px;font-size:16px;line-height:1.25}
+.lesson-body{margin:0;font-size:13.5px;line-height:1.5}
+.lesson-missing{margin:8px 0 0;font-size:12px;opacity:.7}
+.lesson-foot{grid-column:1 / -1;display:flex;align-items:center;gap:8px;margin-top:6px}
+.lesson-spacer{flex:1}
+.lesson-skip{background:transparent;border-color:transparent;text-decoration:underline;padding-left:0}
+@keyframes lesson-pulse{50%{box-shadow:0 0 0 8px rgba(245,197,24,.12)}}
+@keyframes lesson-bob{50%{transform:translateY(-4px)}}
+@media (prefers-reduced-motion:reduce){.lesson-ring,.lesson-avatar{animation:none}}
+@media (max-width:480px){.lesson-card{grid-template-columns:1fr}.lesson-avatar{width:80px}}
+
+.lesson-list{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.lesson-list li{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.lesson-list .lesson-list-text{flex:1;min-width:0}
+.lesson-list h3{margin:0 0 2px;font-size:14px}
+.lesson-list p{margin:0;font-size:12.5px;opacity:.75}
+.lesson-status{font-size:11px;font-weight:600;white-space:nowrap;opacity:.7}

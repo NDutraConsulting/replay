@@ -52,8 +52,8 @@ You need `uv` (Python), `npm` (Node), `curl` and `lsof`.
 ./run-site.sh            # backend on :8000, frontend on :5173
 ./run-site.sh restart    # replace whatever is holding those ports
 ./run-site.sh stop       # stop both, from any terminal
-./run-site.sh reset      # fresh build: DELETE all three databases, rebuild them, run the seeders, then start (beta only)
-./run-site.sh delete     # simulate a fresh install: stop, DELETE the three databases and exit (.env is not touched); the next ./run-site.sh is a first run
+./run-site.sh reset      # fresh build: DELETE all four databases, rebuild them, run the seeders, then start (beta only)
+./run-site.sh delete     # simulate a fresh install: stop, DELETE the four databases and exit (.env is not touched); the next ./run-site.sh is a first run
 ```
 
 Open http://localhost:5173 and sign in as `demo` / `demo` (the seeded account; its password is `DEMO_PASSWORD`) or sign up.
@@ -81,11 +81,12 @@ encryption key. The settings you are most likely to change:
 
 ## Data
 
-Three SQLite files, kept in `backend/` and backed up together:
+Four SQLite files, kept in `backend/` and backed up together:
 
 - `app.db`: accounts, conversations, messages, replay runs and saved replays.
 - `knowledgebase.db`: each agent's categories, sub categories, files and the choices made while routing.
 - `Log.db`: the raw API calls of chats and replays, and token log probabilities.
+- `lessons.db`: the guided lessons (File > Lessons on the Chat page) and each user's progress through them. The lesson text lives in `backend/db/lesson_seeds/` and is refreshed on every start.
 
 Migrations apply when the server starts, so restart it after pulling a change that adds one. The browser itself stores
 nothing: no `localStorage`, `sessionStorage` or IndexedDB.

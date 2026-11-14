@@ -3,7 +3,7 @@ import { esc } from '../../shared/html.js';
 import { icon } from '../../shared/icons.js';
 import { reasoningLabel } from '../../shared/reasoning.js';
 import { temperatureLabel } from '../../shared/temperature.js';
-import { modelLabel } from '../../shared/model-label.js';
+import { modelLabel, splitModel } from '../../shared/model-label.js';
 import { showModal } from '../../shared/modal-ui.js';
 import { openChatPicker } from '../../shared/chat-picker-ui.js';
 
@@ -247,8 +247,21 @@ export function bindChat(h) {
 
 const agentOptions = (agents, selected) =>
   agents.map((a) => `<option value="${esc(a.id)}" ${a.id === selected ? 'selected' : ''}>${esc(a.name)}</option>`).join('');
-const modelOptions = (models, selected) =>
-  models.map((m) => `<option value="${esc(m)}" ${m === selected ? 'selected' : ''}>${esc(modelLabel(m))}</option>`).join('');
+const NO_API = ''; // the group of plain model names (demo models, no API behind them)
+const DEMO_LABEL = 'Demo (no API)';
+const providerOf = (ref) => splitModel(ref).label ?? NO_API;
+/** The API choices: each API label that serves a model, in the order the models list them. */
+const providerList = (models) => [...new Set(models.map(providerOf))];
+const providerOptions = (models, selected) =>
+  providerList(models)
+    .map((p) => `<option value="${esc(p)}" ${p === selected ? 'selected' : ''}>${esc(p === NO_API ? DEMO_LABEL : p)}</option>`)
+    .join('');
+/** The models of one API only; the option value stays the full "<API>::<model>" the server expects. */
+const modelOptions = (models, provider, selected) =>
+  models
+    .filter((m) => providerOf(m) === provider)
+    .map((m) => `<option value="${esc(m)}" ${m === selected ? 'selected' : ''}>${esc(splitModel(m).model)}</option>`)
+    .join('');
 
 /**
  * The New conversation popup: the name (a free label) and the settings that stay fixed for the conversation.
@@ -269,13 +282,18 @@ export function openNewConversationModal(s, values, onCreate) {
     title: 'New conversation',
     submitLabel: 'Start conversation',
     wide: true,
-    bodyHTML: `<p class="modal-text">Choose how this conversation runs. The agent, model, reasoning level, temperature, KB summary tool and brief replies settings are fixed once it starts, so you can compare conversations against each other. Only the name can change later.</p><div class="modal-field"><label for="new-chat-name">Conversation name</label><input type="text" id="new-chat-name" name="name" maxlength="80" autocomplete="off" placeholder="e.g. Segmentation, high reasoning" value="${esc(values.name)}"><p class="modal-hint">Just a label. It can repeat.</p></div><div class="modal-grid"><div class="modal-field"><label for="new-chat-agent">AI agent</label><select id="new-chat-agent" name="agent">${agentOptions(s.agents, values.agentId)}</select></div><div class="modal-field"><label for="new-chat-model">Model</label><select id="new-chat-model" name="model">${modelOptions(s.models, values.model)}</select></div><div class="modal-field"><label for="new-chat-reasoning">Reasoning level</label><select id="new-chat-reasoning" name="reasoning">${reasoningOptionsHTML(values.reasoningLevel)}</select><p class="modal-hint">Sent to the model as OpenAI's reasoning effort. A model that does not support the level you pick will say so when you send a message.</p></div><div class="modal-field"><label for="new-chat-temperature">Temperature</label><input type="number" id="new-chat-temperature" name="temperature" min="0" max="2" step="0.1" inputmode="decimal" value="${values.temperature ?? 0}"><p class="modal-hint">${TEMPERATURE_HINT}</p></div></div><div class="modal-grid"><div class="modal-field modal-check"><input type="checkbox" class="switch" role="switch" id="new-chat-kbsummary" name="kbsummary" ${values.kbSummaryTool ? 'checked' : ''}><div><label for="new-chat-kbsummary">KB summary tool</label><p class="modal-hint">Off: the whole knowledge base file the agent chooses is sent to the model. On: a model first writes a summary of the file for this conversation (under 1000 words) and that is sent instead.</p></div></div><div class="modal-field modal-check"><input type="checkbox" class="switch" role="switch" id="new-chat-brief" name="briefreplies" ${values.briefReplies ? 'checked' : ''}><div><label for="new-chat-brief">Brief replies</label><p class="modal-hint">On: "Respond in 100 words or less." is added to the end of each request sent to the model. Off: requests are sent as you wrote them.</p></div></div></div>${s.cleared?'':'<button type="button" class="btn modal-prefill" id="use-chat-settings">Use this chat\'s settings</button>'}`,
+    bodyHTML: `<p class="modal-text">Choose how this conversation runs. The agent, API provider, model, reasoning level, temperature, KB summary tool and brief replies settings are fixed once it starts, so you can compare conversations against each other. Only the name can change later.</p><div class="modal-field"><label for="new-chat-name">Conversation name</label><input type="text" id="new-chat-name" name="name" maxlength="80" autocomplete="off" placeholder="e.g. Segmentation, high reasoning" value="${esc(values.name)}"><p class="modal-hint">Just a label. It can repeat.</p></div><div class="modal-grid"><div class="modal-field"><label for="new-chat-agent">AI agent</label><select id="new-chat-agent" name="agent">${agentOptions(s.agents, values.agentId)}</select></div><div class="modal-field"><label for="new-chat-provider">API provider</label><select id="new-chat-provider" name="provider">${providerOptions(s.models, providerOf(values.model))}</select></div><div class="modal-field"><label for="new-chat-model">Model</label><select id="new-chat-model" name="model">${modelOptions(s.models, providerOf(values.model), values.model)}</select></div><div class="modal-field"><label for="new-chat-reasoning">Reasoning level</label><select id="new-chat-reasoning" name="reasoning">${reasoningOptionsHTML(values.reasoningLevel)}</select><p class="modal-hint">Sent to the model as OpenAI's reasoning effort. A model that does not support the level you pick will say so when you send a message.</p></div><div class="modal-field"><label for="new-chat-temperature">Temperature</label><input type="number" id="new-chat-temperature" name="temperature" min="0" max="2" step="0.1" inputmode="decimal" value="${values.temperature ?? 0}"><p class="modal-hint">${TEMPERATURE_HINT}</p></div></div><div class="modal-grid"><div class="modal-field modal-check"><input type="checkbox" class="switch" role="switch" id="new-chat-kbsummary" name="kbsummary" ${values.kbSummaryTool ? 'checked' : ''}><div><label for="new-chat-kbsummary">KB summary tool</label><p class="modal-hint">Off: the whole knowledge base file the agent chooses is sent to the model. On: a model first writes a summary of the file for this conversation (under 1000 words) and that is sent instead.</p></div></div><div class="modal-field modal-check"><input type="checkbox" class="switch" role="switch" id="new-chat-brief" name="briefreplies" ${values.briefReplies ? 'checked' : ''}><div><label for="new-chat-brief">Brief replies</label><p class="modal-hint">On: "Respond in 100 words or less." is added to the end of each request sent to the model. Off: requests are sent as you wrote them.</p></div></div></div>${s.cleared?'':'<button type="button" class="btn modal-prefill" id="use-chat-settings">Use this chat\'s settings</button>'}`,
     onMount(form) {
+      const fillModels = (provider, selected) => {
+        form.elements.model.innerHTML = modelOptions(s.models, provider, selected);
+      };
+      form.elements.provider.onchange = () => fillModels(form.elements.provider.value);
       const useSettings = form.querySelector('#use-chat-settings'); // not offered when no chat is open
       if (useSettings) useSettings.onclick = () => {
         form.elements.name.value = `${s.name} 2`.slice(0, 80);
         form.elements.agent.value = s.agentId;
-        form.elements.model.value = s.model;
+        form.elements.provider.value = providerOf(s.model);
+        fillModels(providerOf(s.model), s.model);
         form.elements.reasoning.value = s.reasoningLevel;
         form.elements.temperature.value = s.temperature ?? 0;
         form.elements.kbsummary.checked = s.kbSummaryTool;

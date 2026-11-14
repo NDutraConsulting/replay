@@ -1,13 +1,14 @@
 """Deletes the SQLite database files. Destructive and opt-in: requires --yes.
 
 Usage:
-  uv run python scripts/reset_db.py --yes                  delete app.db, knowledgebase.db AND Log.db
+  uv run python scripts/reset_db.py --yes                  delete app.db, knowledgebase.db, Log.db AND lessons.db
   uv run python scripts/reset_db.py --yes --only=app       only app.db (accounts, chats, replays, settings)
   uv run python scripts/reset_db.py --yes --only=knowledge only knowledgebase.db (the knowledge bases)
   uv run python scripts/reset_db.py --yes --only=log       only Log.db (the raw API log; nothing else depends on it)
+  uv run python scripts/reset_db.py --yes --only=lessons   only lessons.db (the guided lessons and everyone's progress)
 
 The files are rebuilt (migrations + seeds) on the next server start. Resetting only app.db leaves knowledge base
-rows and API logs for users that no longer exist, so the default deletes all three.
+rows and API logs for users that no longer exist, so the default deletes all four.
 """
 
 import sys
@@ -27,10 +28,11 @@ def main(argv: list[str]) -> int:
         "app": [settings.DATABASE_PATH],
         "knowledge": [settings.KNOWLEDGE_DB_PATH],
         "log": [settings.LOG_DB_PATH],
+        "lessons": [settings.LESSONS_DB_PATH],
     }
-    targets["all"] = targets["app"] + targets["knowledge"] + targets["log"]
+    targets["all"] = targets["app"] + targets["knowledge"] + targets["log"] + targets["lessons"]
     if only not in targets:
-        print(f"Unknown --only={only}. Use app, knowledge, log or leave it out for all three.")
+        print(f"Unknown --only={only}. Use app, knowledge, log, lessons or leave it out for all four.")
         return 2
     for name in targets[only]:
         db_path = Path(name)

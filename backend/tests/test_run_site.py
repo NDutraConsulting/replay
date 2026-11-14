@@ -32,6 +32,7 @@ def site(tmp_path):
         "DATABASE_PATH": str(data / "app.db"),
         "KNOWLEDGE_DB_PATH": str(data / "knowledgebase.db"),
         "LOG_DB_PATH": str(data / "Log.db"),
+        "LESSONS_DB_PATH": str(data / "lessons.db"),
         "BACKEND_PORT": "8791",
         "FRONTEND_PORT": "5791",
     }
@@ -50,17 +51,26 @@ def fingerprint(path):
 
 
 def fill(data):
-    for name in ("app.db", "app.db-wal", "app.db-shm", "knowledgebase.db", "Log.db", "Log.db-wal"):
+    for name in (
+        "app.db",
+        "app.db-wal",
+        "app.db-shm",
+        "knowledgebase.db",
+        "Log.db",
+        "Log.db-wal",
+        "lessons.db",
+        "lessons.db-shm",
+    ):
         (data / name).write_text("old data")
 
 
-def test_delete_removes_all_three_databases_and_their_wal_files_and_starts_nothing(site):
+def test_delete_removes_all_four_databases_and_their_wal_files_and_starts_nothing(site):
     fill(site.data)
     (site.data / "notes.txt").write_text("not a database")
     result = site("delete")
     assert result.returncode == 0, result.stderr
     assert sorted(p.name for p in site.data.iterdir()) == ["notes.txt"]  # only the databases went
-    assert "Deleting app.db, knowledgebase.db and Log.db" in result.stdout
+    assert "Deleting app.db, knowledgebase.db, Log.db and lessons.db" in result.stdout
     assert "Starting the backend" not in result.stdout and "Starting the frontend" not in result.stdout
     assert "Run ./run-site.sh to start as on a fresh install." in result.stdout
 

@@ -12,6 +12,7 @@ from api import (
     routes_chat_records,
     routes_conversations,
     routes_knowledge_base,
+    routes_lessons,
     routes_preferences,
     routes_replay,
     routes_settings,
@@ -19,7 +20,7 @@ from api import (
 from config import Settings, get_settings
 from db.connection import init_db
 from errors import AppError
-from services import seed_service
+from services import lesson_service, seed_service
 
 
 def _resolve_settings(app: FastAPI) -> Settings:
@@ -31,8 +32,9 @@ def _resolve_settings(app: FastAPI) -> Settings:
 async def lifespan(app: FastAPI):
     settings = _resolve_settings(app)
     logging.basicConfig(level=settings.LOG_LEVEL.upper())
-    init_db(settings.DATABASE_PATH, settings.KNOWLEDGE_DB_PATH, settings.LOG_DB_PATH)
+    init_db(settings.DATABASE_PATH, settings.KNOWLEDGE_DB_PATH, settings.LOG_DB_PATH, settings.LESSONS_DB_PATH)
     await seed_service.seed_all(settings)
+    await lesson_service.seed(settings)  # the lesson content is code: refreshed on every start
     yield
 
 
@@ -78,3 +80,4 @@ app.include_router(routes_knowledge_base.router)
 app.include_router(routes_conversations.router)
 app.include_router(routes_chat_records.router)
 app.include_router(routes_replay.router)
+app.include_router(routes_lessons.router)

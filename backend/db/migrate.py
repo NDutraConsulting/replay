@@ -18,6 +18,8 @@ KB_MIGRATIONS_DIR = Path(__file__).parent / "kb_migrations"
 """The knowledge base database (knowledgebase.db) has its own migrations and its own schema_migrations table."""
 LOG_MIGRATIONS_DIR = Path(__file__).parent / "log_migrations"
 """The API log database (Log.db) has its own migrations and its own schema_migrations table."""
+LESSON_MIGRATIONS_DIR = Path(__file__).parent / "lesson_migrations"
+"""The lessons database (lessons.db) has its own migrations and its own schema_migrations table."""
 _NAME = re.compile(r"^(\d{4})_[a-z0-9_]+\.sql$")
 
 

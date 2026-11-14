@@ -17,17 +17,19 @@ uv sync
 ./run.sh --reset-app        # only app.db (accounts, chats, replays, settings)
 ./run.sh --reset-knowledge  # only knowledgebase.db (the knowledge bases)
 ./run.sh --reset-log        # only Log.db (the raw API log)
+./run.sh --reset-lessons    # only lessons.db (the guided lessons and everyone's progress)
 ```
 
-### Three databases
+### Four databases
 
 | File | Setting | Holds |
 |---|---|---|
 | `app.db` | `DATABASE_PATH` | accounts, sessions, agents, provider settings, preferences, conversations, `conversation_forks` (which conversation was forked from which), replay runs and results |
 | `knowledgebase.db` | `KNOWLEDGE_DB_PATH` | the knowledge bases (categories, sub categories, files, seed markers) and the `knowledge_base_choice` table |
 | `Log.db` | `LOG_DB_PATH` | the raw API log, **append-only**: every REST call made to the model provider while a chat prompt was answered or a replay result was produced (URL, request, response; never the API key), plus the fork log |
+| `lessons.db` | `LESSONS_DB_PATH` | guided lessons (`lessons`, `lesson_steps`, `lesson_avatars`) and per-user `lesson_progress`; ordinary read/write, not append-only |
 
-Each has its own migrations (`db/migrations/`, `db/kb_migrations/`, `db/log_migrations/`) and its own `schema_migrations` table. There are no foreign
+Each has its own migrations (`db/migrations/`, `db/kb_migrations/`, `db/log_migrations/`, `db/lesson_migrations/`) and its own `schema_migrations` table. There are no foreign
 keys between them: knowledge rows carry a plain `user_id` and `agent_id`, every query is scoped by `user_id`, and the agent is
 checked against `app.db`. Deleting a user must also call `kb_repository.delete_user_knowledge`. **Back the files up together.** `Log.db` is only read by the API log buttons. The application never updates or deletes a chat log row (see "The chat log is append-only" below); `./run.sh --reset-log` (and `--reset`) delete the whole file, which is an administrator action outside the API and destroys that record. `run.sh` refuses any `--reset*` while a server is already running on its port (stop it first, or use `./run.sh restart --reset-log`): deleting the files under a live server leaves it with no log tables. If `Log.db` is deleted or emptied under a running server anyway, the log repositories rebuild its schema from the migrations on the next read or write (`db.connection.run_in_log_db`) instead of failing with `no such table`; the old rows are gone with the file.
 
@@ -59,6 +61,7 @@ Demo login: **`demo` / `demo`** (the password is `DEMO_PASSWORD`; set it to some
 | `DATABASE_PATH` | `app.db` | SQLite file for accounts, chats, replays and settings |
 | `KNOWLEDGE_DB_PATH` | `knowledgebase.db` | SQLite file for the knowledge bases |
 | `LOG_DB_PATH` | `Log.db` | SQLite file for the raw API log |
+| `LESSONS_DB_PATH` | `lessons.db` | SQLite file for the guided lessons and their progress |
 | `ENCRYPTION_KEY` | *(required to save an API key)* | Fernet key encrypting provider API keys at rest. `run.sh` generates one |
 | `OPENAI_API_KEY` | *(empty: demo mode)* | Optional OpenAI key you add by hand. Every account sees it as one more API, labelled "OpenAI (server key)", beside the APIs it adds on the Account page (read only there). Restart after changing it. The key is never sent to the browser |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | API URL used with `OPENAI_API_KEY` |
@@ -293,3 +296,17 @@ uv run ruff check .
 Login throttling / rate limiting, CSRF tokens (cookies are `SameSite=Lax` and bodies are JSON-only), automatic
 detection of a client disconnect (stop needs the stop command), edit-conflict detection on documents, the
 Evals page.
+
+
+## Guided lessons (`lessons.db`)
+
+A lesson is a list of steps shown over the live page: a spotlight on a control (a CSS `target`), a card with a T. rex avatar and the words. The content is code, in `db/lesson_seeds/` (one module per lesson, plus `avatars.py`), and `lesson_service.seed` upserts it into `lessons.db` on every start, so editing the copy ships with the code. Progress (`lesson_progress`: step, status `in_progress | completed | skipped`) is per user and saved by the page on every move. `completed` is sticky until the user restarts the lesson, and bumping a lesson's `version` restarts everyone's progress. Steps name an `action` from a fixed list (`open-menu`, `open-select`, `fill`, `focus`, `none`); the frontend implements them, the data never holds code.
+
+| Route | Purpose |
+|---|---|
+| `GET /api/lessons` | every lesson with step count and the user's progress (`not_started` when there is none) |
+| `GET /api/lessons/{slug}` | the lesson with its steps and avatars |
+| `PUT /api/lessons/{slug}/progress` | `{step, status}` (step must be inside the lesson) |
+| `POST /api/lessons/{slug}/restart` | forget the user's progress |
+
+If `lessons.db` is deleted under a running server, the next request rebuilds its tables and re-seeds it (`db.connection.run_in_lessons_db`). User ids are `app.db` ids with no foreign key (a different file); there is no account deletion yet, so nothing removes a user's progress. A test checks that every `target` still exists in the Chat page source. To add a lesson: add a module in `db/lesson_seeds/`, list it in `LESSONS`, and add any new avatar to `avatars.py` and to `replay-chat-vite/scripts/make-lesson-avatars.sh`.

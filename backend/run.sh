@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Dev server. The database is persistent: this script NEVER wipes it unless you pass --reset.
 #
-# Usage: ./run.sh [restart] [--reset | --reset-app | --reset-knowledge | --reset-log]
+# Usage: ./run.sh [restart] [--reset | --reset-app | --reset-knowledge | --reset-log | --reset-lessons]
 #   restart            stop whatever is already listening on PORT first
-#   --reset            delete app.db, knowledgebase.db AND Log.db before starting (explicit opt-in; all data is lost)
+#   --reset            delete app.db, knowledgebase.db, Log.db AND lessons.db before starting (explicit opt-in; all data is lost)
 #                      (every --reset* refuses to run while a server is already on PORT: use 'restart' with it)
 #   --reset-app        delete only app.db (accounts, chats, replays, settings)
 #   --reset-knowledge  delete only knowledgebase.db (the knowledge bases)
 #   --reset-log        delete only Log.db (the raw API log)
+#   --reset-lessons    delete only lessons.db (the guided lessons and everyone's progress)
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -20,6 +21,7 @@ for arg in "$@"; do
     --reset-app) RESET=app ;;
     --reset-knowledge) RESET=knowledge ;;
     --reset-log) RESET=log ;;
+    --reset-lessons) RESET=lessons ;;
     restart) RESTART=1 ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
@@ -29,7 +31,7 @@ done
 # started below could not take the busy port anyway. So a reset needs the old server stopped first: use 'restart'.
 if [[ -n "$RESET" && "$RESTART" != 1 && -n "$(lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true)" ]]; then
   echo "A server is already running on port $PORT, so the database files were NOT deleted." >&2
-  echo "Stop it first, or run: ./run.sh restart --reset   (or --reset-app, --reset-knowledge, --reset-log)" >&2
+  echo "Stop it first, or run: ./run.sh restart --reset   (or --reset-app, --reset-knowledge, --reset-log, --reset-lessons)" >&2
   exit 1
 fi
 

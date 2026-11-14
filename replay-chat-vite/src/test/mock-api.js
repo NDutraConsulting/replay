@@ -69,6 +69,7 @@ export function appRoutes(overrides = {}) {
       { id: 'research', name: 'IT Security Assistant' },
     ],
     settings: { models: ['model-a', 'model-b', 'model-c'], connected: false, connections: [] },
+    lessons: [],
     preferences: { agent_id: 'assistant', model: null, chat_sidebar_hidden: false, replay_prompts_hidden: true, show_compact_button: false, show_rewind_button: true },
     ...overrides,
   };
@@ -77,6 +78,9 @@ export function appRoutes(overrides = {}) {
     'GET /api/agents': () => state.agents,
     'GET /api/settings': () => state.settings,
     'GET /api/preferences': () => state.preferences,
+    'GET /api/lessons': () => state.lessons,
+    'GET /api/lessons/:slug': ({ params }) => state.lessonDetails?.[params.slug],
+    'PUT /api/lessons/:slug/progress': ({ body }) => ({ status: body.status, current_step: body.step }),
     'PUT /api/preferences': ({ body }) => Object.assign(state.preferences, body),
     'POST /api/account/logout': () => ({ status: 'logged_out' }),
   };

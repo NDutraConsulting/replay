@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setUnauthorizedHandler } from '../../shared/http.js';
 import { apiError, appRoutes, created, mockApi, noContent, settle } from '../../test/mock-api.js';
 
@@ -968,6 +968,85 @@ describe('chat page', () => {
     });
   });
 
+  describe('lessons', () => {
+    const avatar = { avatar_slug: 'guide', file: 'guide.webp', alt: 'Rex', facing: 'front' };
+    const s = (position, title, target, over = {}) => ({ position, title, body: title, target, action: 'none', action_arg: null, on_next: 'none', on_target_gone: 'stop', placement: 'top', avatar, ...over });
+    const DEMO = {
+      slug: 'chat-start-conversation', page: 'chat', title: 'Start a conversation', summary: 'Learn the popup.', step_count: 3,
+      progress: { status: 'not_started', current_step: 0 },
+    };
+    const DETAIL = {
+      ...DEMO, version: 1,
+      steps: [
+        s(0, 'Welcome', null),
+        s(1, 'Open File > New', '#file-new', { action: 'open-menu', on_next: 'click' }),
+        s(2, 'Name it', '#new-chat-name', { action: 'fill', action_arg: 'My first conversation' }),
+        s(3, 'Done', null),
+      ],
+    };
+    const lessonApp = (progress = DEMO.progress) => ({ lessons: [{ ...DEMO, progress }], lessonDetails: { [DEMO.slug]: DETAIL } });
+    const cardTitle = () => document.querySelector('.lesson-title')?.textContent;
+    const next = () => document.querySelector('[data-lesson-next]').click();
+    afterEach(() => document.querySelector('[data-lesson-skip]')?.click()); // a lesson left running would also swallow the next test's Escape
+
+    it('File > Lessons lists the lessons for this page and Start plays one over the real popup', async () => {
+      await boot({ appOverrides: lessonApp() });
+      $('file-menu-btn').click();
+      $('file-lessons').click();
+      await settle();
+      expect(document.querySelector('.modal-head h2').textContent).toBe('Lessons');
+      expect(document.querySelector('.lesson-list h3').textContent).toBe('Start a conversation');
+      expect(document.querySelector('.lesson-status').textContent).toBe('Not started');
+      document.querySelector('[data-lesson]').click();
+      await settle();
+      expect(cardTitle()).toBe('Welcome');
+      next(); // Start
+      expect(cardTitle()).toBe('Open File > New');
+      next(); // Next clicks File > New for the user: the real New conversation popup opens
+      expect(modal().querySelector('#new-chat-name')).not.toBeNull();
+      await settle();
+      expect(cardTitle()).toBe('Name it');
+      expect(field('name').value).toBe('My first conversation');
+      expect(document.querySelector('.lesson-ring').hidden).toBe(false);
+    });
+
+    it('a completed lesson says Redo', async () => {
+      await boot({ appOverrides: lessonApp({ status: 'completed', current_step: 3 }) });
+      $('file-menu-btn').click();
+      $('file-lessons').click();
+      await settle();
+      expect(document.querySelector('.lesson-status').textContent).toBe('Completed');
+      expect(document.querySelector('[data-lesson]').textContent).toBe('Redo');
+    });
+
+    it('the Welcome back popup offers Take the tour to someone with no completed lesson, and the tour starts the lesson', async () => {
+      await boot({ keepArrival: true, appOverrides: lessonApp() });
+      const ids = [...document.querySelectorAll('[data-choice]')].map((b) => b.dataset.choice);
+      expect(ids).toEqual(['open', 'new', 'tour']);
+      document.querySelector('[data-choice="tour"]').click();
+      await settle();
+      expect(cardTitle()).toBe('Welcome');
+    });
+
+    it('no tour button once a lesson is completed, or when there are no lessons', async () => {
+      await boot({ keepArrival: true, appOverrides: lessonApp({ status: 'completed', current_step: 3 }) });
+      expect([...document.querySelectorAll('[data-choice]')].map((b) => b.dataset.choice)).toEqual(['open', 'new']);
+      await boot({ keepArrival: true });
+      expect([...document.querySelectorAll('[data-choice]')].map((b) => b.dataset.choice)).toEqual(['open', 'new']);
+    });
+
+    // The lesson (backend/db/lesson_seeds/chat_start_conversation.py) points at these ids; a rename here breaks it.
+    it('keeps the ids the Start a conversation lesson points at', async () => {
+      await boot();
+      newChat();
+      for (const id of ['name', 'agent', 'provider', 'model', 'reasoning', 'temperature', 'kbsummary', 'brief']) {
+        expect(modal().querySelector(`#new-chat-${id}`), `#new-chat-${id}`).not.toBeNull();
+      }
+      expect(modal().querySelector('.modal-actions button[type=submit]')).not.toBeNull();
+      expect(document.getElementById('file-new')).not.toBeNull();
+    });
+  });
+
   describe('returning to the page', () => {
     const popupTitle = () => document.querySelector('.modal-head h2')?.textContent;
     const choices = () => [...document.querySelectorAll('[data-choice]')];
@@ -1458,17 +1537,27 @@ describe('chat page', () => {
   describe('models from several APIs', () => {
     const APPS = { settings: { models: ['H100::llama', 'A100::llama', 'A100::mixtral'], connected: true, connections: [] } };
 
-    it('offers each API\'s models as "label · model", with the label-qualified choice as the value', async () => {
+    const pick = (provider) => {
+      field('provider').value = provider;
+      field('provider').dispatchEvent(new Event('change'));
+    };
+
+    it('offers an API provider dropdown and lists only that API\'s models, the value being the label-qualified choice', async () => {
       await boot({ appOverrides: APPS, config: { model: 'H100::llama' } });
       newChat();
+      expect([...field('provider').options].map((o) => o.value)).toEqual(['H100', 'A100']);
+      expect(field('provider').value).toBe('H100'); // follows the default model
+      expect([...field('model').options].map((o) => o.value)).toEqual(['H100::llama']);
+      pick('A100');
       const options = [...field('model').options];
-      expect(options.map((o) => o.textContent)).toEqual(['H100 · llama', 'A100 · llama', 'A100 · mixtral']); // the same name on two APIs reads as two choices
-      expect(options.map((o) => o.value)).toEqual(['H100::llama', 'A100::llama', 'A100::mixtral']);
+      expect(options.map((o) => o.textContent)).toEqual(['llama', 'mixtral']);
+      expect(options.map((o) => o.value)).toEqual(['A100::llama', 'A100::mixtral']);
     });
 
     it('starts the conversation on the chosen API\'s model and shows it as label · model', async () => {
       const { mock } = await boot({ appOverrides: APPS, config: { model: 'H100::llama' } });
       newChat();
+      pick('A100');
       field('model').value = 'A100::llama';
       modal().querySelector('form').requestSubmit();
       await settle();

@@ -72,7 +72,7 @@ describe('each page has its own File menu', () => {
     const onNew = vi.fn();
     const onOpen = vi.fn();
     mountChatFileMenu({ onNew, onOpen });
-    expect(items()).toEqual(['New', 'Open', 'Config']);
+    expect(items()).toEqual(['New', 'Open', 'Lessons', 'Config']);
     document.getElementById('file-menu-btn').click();
     document.getElementById('file-new').click();
     document.getElementById('file-menu-btn').click();

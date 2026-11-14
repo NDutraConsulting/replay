@@ -65,7 +65,13 @@ def run_reset(tmp_path, *args):
     for path in (app, kb):
         path.write_text("x")
         Path(f"{path}-wal").write_text("x")
-    env = {**os.environ, "DATABASE_PATH": str(app), "KNOWLEDGE_DB_PATH": str(kb)}
+    env = {
+        **os.environ,
+        "DATABASE_PATH": str(app),
+        "KNOWLEDGE_DB_PATH": str(kb),
+        "LOG_DB_PATH": str(tmp_path / "l.db"),  # all four are set, so a default reset can never touch the real files
+        "LESSONS_DB_PATH": str(tmp_path / "ls.db"),
+    }
     result = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "reset_db.py"), *args],
         cwd=ROOT,

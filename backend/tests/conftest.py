@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from config import Settings, get_settings
 from db.connection import init_db
-from services import seed_service
+from services import lesson_service, seed_service
 
 
 @pytest.fixture
@@ -17,6 +17,7 @@ def test_settings(tmp_path) -> Settings:
         DATABASE_PATH=str(tmp_path / "test.db"),
         KNOWLEDGE_DB_PATH=str(tmp_path / "knowledge-test.db"),
         LOG_DB_PATH=str(tmp_path / "log-test.db"),
+        LESSONS_DB_PATH=str(tmp_path / "lessons-test.db"),
         ENCRYPTION_KEY=Fernet.generate_key().decode(),
         OPENAI_API_KEY="",  # a key in the developer's shell or .env must never turn the tests into live calls
         PASSWORD_HASH_ITERATIONS=1000,  # fast hashing in tests
@@ -107,8 +108,14 @@ def llm_stub(monkeypatch) -> LLMStub:
 
 @pytest.fixture
 def db(test_settings: Settings) -> str:
-    init_db(test_settings.DATABASE_PATH, test_settings.KNOWLEDGE_DB_PATH, test_settings.LOG_DB_PATH)
+    init_db(
+        test_settings.DATABASE_PATH,
+        test_settings.KNOWLEDGE_DB_PATH,
+        test_settings.LOG_DB_PATH,
+        test_settings.LESSONS_DB_PATH,
+    )
     asyncio.run(seed_service.seed_all(test_settings))
+    asyncio.run(lesson_service.seed(test_settings))
     return test_settings.DATABASE_PATH
 
 

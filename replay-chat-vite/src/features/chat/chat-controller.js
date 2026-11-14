@@ -5,6 +5,8 @@ import { newRequestId } from '../../shared/http.js';
 import { startPage } from '../../shared/shell-ui.js';
 import { choiceDialog } from '../../shared/modal-ui.js';
 import { mountChatFileMenu } from './chat-file-menu.js';
+import { createLessonPlayer } from '../lessons/lesson-player.js';
+import { openLessonsList, tourLesson } from '../lessons/lessons-list-ui.js';
 import { toast, toastError } from '../../shared/toast.js';
 import { openApiLogModal } from '../../shared/api-log-ui.js';
 import { modelLabel } from '../../shared/model-label.js';
@@ -364,20 +366,25 @@ export const initChat = () =>
       },
     };
 
-    mountChatFileMenu({ onNew: handlers.onNewChat, onOpen: handlers.onOpenChat, onConfig: handlers.onConfig });
+    const lessonPlayer = createLessonPlayer();
+    handlers.onLessons = () => openLessonsList('chat', lessonPlayer);
+    mountChatFileMenu({ onNew: handlers.onNewChat, onOpen: handlers.onOpenChat, onLessons: handlers.onLessons, onConfig: handlers.onConfig });
     render();
     // Returning to the page: ask what to do. Dismissing the popup keeps the chat that is on screen behind it. (A locked chat
     // is not forked here: its banner offers that, and opening a locked chat from the list asks first.)
+    const tour = await tourLesson('chat'); // offered only to someone who has not finished a lesson yet
     choiceDialog({
       title: 'Welcome back',
       message: 'Open one of your chats, or start a new one?',
       choices: [
         { id: 'open', label: 'Open Chat', primary: true },
         { id: 'new', label: 'New Chat' },
+        ...(tour ? [{ id: 'tour', label: 'Take the tour' }] : []),
       ],
     }).then((choice) => {
       if (choice === 'open') handlers.onOpenChat();
       else if (choice === 'new') handlers.onNewChat();
+      else if (choice === 'tour') lessonPlayer.start(tour.slug).catch(toastError);
     });
   });
 

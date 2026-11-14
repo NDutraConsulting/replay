@@ -5,7 +5,7 @@ from collections.abc import Callable
 
 from db.kb_move import move_knowledge_base
 from db.kb_versions import backfill as backfill_document_versions
-from db.migrate import KB_MIGRATIONS_DIR, LOG_MIGRATIONS_DIR, apply_migrations
+from db.migrate import KB_MIGRATIONS_DIR, LESSON_MIGRATIONS_DIR, LOG_MIGRATIONS_DIR, apply_migrations
 
 
 def get_connection(db_path: str) -> sqlite3.Connection:
@@ -15,13 +15,16 @@ def get_connection(db_path: str) -> sqlite3.Connection:
     return conn
 
 
-def init_db(db_path: str, knowledge_db_path: str, log_db_path: str | None = None) -> list[int]:
-    """Create/upgrade the database files (app.db, knowledgebase.db and, when given, Log.db). They persist between runs; only new migrations are applied.
+def init_db(
+    db_path: str, knowledge_db_path: str, log_db_path: str | None = None, lessons_db_path: str | None = None
+) -> list[int]:
+    """Create/upgrade the database files (app.db, knowledgebase.db and, when given, Log.db and lessons.db). They persist between runs; only new migrations are applied.
 
     Order matters: the knowledge base database is created first, the old knowledge base tables are copied out of
     app.db (verified), and only then does app.db's migration 0004 drop them.
     Returns the app.db migration versions applied by this call."""
-    for path in (db_path, knowledge_db_path, *([log_db_path] if log_db_path else [])):
+    extra = [p for p in (log_db_path, lessons_db_path) if p]
+    for path in (db_path, knowledge_db_path, *extra):
         conn = sqlite3.connect(path)
         try:
             conn.execute("PRAGMA journal_mode = WAL")
@@ -30,6 +33,8 @@ def init_db(db_path: str, knowledge_db_path: str, log_db_path: str | None = None
     apply_migrations(knowledge_db_path, KB_MIGRATIONS_DIR)
     if log_db_path:
         apply_migrations(log_db_path, LOG_MIGRATIONS_DIR)
+    if lessons_db_path:
+        apply_migrations(lessons_db_path, LESSON_MIGRATIONS_DIR)
     move_knowledge_base(db_path, knowledge_db_path)
     backfill_document_versions(knowledge_db_path)  # every file has at least its version 1
     return apply_migrations(db_path)
@@ -61,6 +66,32 @@ async def run_in_log_db[T](db_path: str, fn: Callable[[sqlite3.Connection], T]) 
         if "no such table" not in str(exc):
             raise
     await asyncio.to_thread(_ensure_log_schema, db_path)
+    return await run_in_db(db_path, fn)
+
+
+_LESSONS_HEAL = threading.Lock()
+
+
+def _ensure_lessons_schema(db_path: str) -> None:
+    """Rebuild lessons.db's tables (and its seeded lessons are restored by the next start or seed) after the file was deleted
+    while the server runs. Same idea as `_ensure_log_schema`."""
+    with _LESSONS_HEAL:
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.execute("PRAGMA journal_mode = WAL")
+        finally:
+            conn.close()
+        apply_migrations(db_path, LESSON_MIGRATIONS_DIR)
+
+
+async def run_in_lessons_db[T](db_path: str, fn: Callable[[sqlite3.Connection], T]) -> T:
+    """`run_in_db` for lessons.db, with the one retry after rebuilding the schema when a table is missing."""
+    try:
+        return await run_in_db(db_path, fn)
+    except sqlite3.OperationalError as exc:
+        if "no such table" not in str(exc):
+            raise
+    await asyncio.to_thread(_ensure_lessons_schema, db_path)
     return await run_in_db(db_path, fn)
 
 

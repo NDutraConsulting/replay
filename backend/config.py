@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     """The knowledge base lives in its own SQLite file (categories, sub categories, files, and the routing choices)."""
     LOG_DB_PATH: str = "Log.db"
     """The raw API log (each REST call made to the model provider during a replay) lives in its own SQLite file."""
+    LESSONS_DB_PATH: str = "lessons.db"
+    """The guided lessons (content and each user's progress) live in their own SQLite file."""
     ENCRYPTION_KEY: str = ""
     """Fernet key for provider API keys (see services/crypto_service.py)."""
     OPENAI_API_KEY: str = ""

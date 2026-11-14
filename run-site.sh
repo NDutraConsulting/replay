@@ -5,11 +5,11 @@
 # Usage: ./run-site.sh [stop | restart | reset | delete] [--reset | --reset-app | --reset-knowledge]
 #   stop               stop the backend and the frontend (from any terminal) and exit; starts nothing
 #   restart            stop whatever is already listening on the backend and frontend ports first, then start
-#   reset              a fresh, clean build: stop the site, delete app.db, knowledgebase.db AND Log.db (and their WAL/journal
+#   reset              a fresh, clean build: stop the site, delete app.db, knowledgebase.db, Log.db AND lessons.db (and their WAL/journal
 #                      files), rebuild them from the migrations, run the seeders (agents, the demo account and its knowledge
 #                      bases), then start the site. EVERYTHING IS LOST, the append-only log included. For beta builds.
 #                      It cannot be combined with stop or the --reset* flags (it already clears everything).
-#   delete             simulate a fresh install: stop the site, delete app.db, knowledgebase.db AND Log.db (and their WAL/journal
+#   delete             simulate a fresh install: stop the site, delete app.db, knowledgebase.db, Log.db AND lessons.db (and their WAL/journal
 #                      files), then exit; starts nothing. Nothing else is touched: backend/.env (it is never created, changed or
 #                      removed), the Python packages and node_modules stay. The next plain ./run-site.sh then behaves like a first
 #                      run: it creates the databases, seeds the agents and the demo account, and the knowledge bases fill in on
@@ -95,7 +95,7 @@ fi
 if [[ "$DELETE" == 1 ]]; then
   # a fresh-install simulation: the databases go, nothing else does (and backend/.env is neither created nor changed)
   stop_site && echo "Stopped the site."
-  echo "Deleting app.db, knowledgebase.db and Log.db (and any WAL/journal files)..."
+  echo "Deleting app.db, knowledgebase.db, Log.db and lessons.db (and any WAL/journal files)..."
   (cd backend && uv run python scripts/reset_db.py --yes)
   echo "Done. backend/.env, the Python packages and node_modules were left alone."
   echo "Run ./run-site.sh to start as on a fresh install."
@@ -120,7 +120,7 @@ if [[ "$RESET_ALL" == 1 ]]; then
     key="$(cd backend && uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
     { grep -v '^ENCRYPTION_KEY=' backend/.env.example; echo "ENCRYPTION_KEY=$key"; } > backend/.env
   fi
-  echo "Resetting: deleting app.db, knowledgebase.db and Log.db, then rebuilding and seeding them..."
+  echo "Resetting: deleting app.db, knowledgebase.db, Log.db and lessons.db, then rebuilding and seeding them..."
   (cd backend && uv run python scripts/reset_db.py --yes && uv run python scripts/seed_db.py)
   echo "Fresh build ready."
 fi

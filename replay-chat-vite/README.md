@@ -107,3 +107,8 @@ A level can end in `none` ("Nothing relevant") or `invalid` ("No valid choice");
 agent also sees the selections it made earlier in the same conversation (or, in a replay, the same slot). In demo mode, with no
 model connected, a keyword match does the choosing so the trees can be seen without an API key. See
 `../backend/README.md` for the details and `KB_ROUTING_ENABLED`.
+
+
+## Guided lessons (built)
+
+`src/features/lessons/`: `lesson-player.js` (plays a lesson from `GET /api/lessons/{slug}`: dim layer with the target left clickable, a ring, a card with the avatar, Back / Next / Skip; Escape skips; it saves progress on every move and a failed save never blocks it), `lesson-ui.js` (layer and card, copy is escaped, only `**bold**` is converted), `lessons-list-ui.js` (File > Lessons popup, and the "Take the tour" button on the Welcome back popup for someone with no completed lesson), `lessons-api.js`. The first lesson, "Start a conversation", is seeded in `backend/db/lesson_seeds/chat_start_conversation.py`. A lesson always starts from its first step. **The ids in the New conversation popup (`#new-chat-name`, `-agent`, `-provider`, `-model`, `-reasoning`, `-temperature`, `-kbsummary`, `-brief`) and `#file-new` are a contract with the lesson**: tests on both sides fail if one is renamed. Avatars: `scripts/make-lesson-avatars.sh` shrinks `.focusari/lesson-avatars/*.png` to small WebP files in `public/lessons/avatars/` (needs `sips` and `cwebp`).
