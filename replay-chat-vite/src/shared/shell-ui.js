@@ -4,10 +4,10 @@ import { esc } from './html.js';
 import { icon } from './icons.js';
 import { toastError } from './toast.js';
 
-const paths = { chat: 'index.html', replay: 'replay.html', agents: 'agents.html', account: 'account.html' };
+const paths = { chat: '/', replay: '/replay', agents: '/agents', account: '/account' };
 
 const navLink = (id, label, page) =>
-  `<a href="/${paths[id]}" class="${page === id ? 'active' : ''}" ${page === id ? 'aria-current="page"' : ''}>${icon(id === 'account' ? 'user' : id)}${label}</a>`;
+  `<a href="${paths[id]}" class="${page === id ? 'active' : ''}" ${page === id ? 'aria-current="page"' : ''}>${icon(id === 'account' ? 'user' : id)}${label}</a>`;
 
 const initials = (user) => (user?.username || 'RC').slice(0, 2).toUpperCase();
 
@@ -16,7 +16,7 @@ const FILE_MENU_PAGES = ['chat', 'replay', 'agents'];
 
 export const shellHTML = (page, user) => {
   const withMenu = FILE_MENU_PAGES.includes(page);
-  return `<header class="topbar"><a class="brand" href="index.html" ${withMenu ? 'aria-label="Replay Chat"' : ''}><span class="brand-mark"><img src="/replay-chat-150.png" alt="" width="35" height="35"></span>${withMenu ? '' : 'Replay Chat'}</a>${withMenu ? '<div class="topbar-file" id="topbar-file"></div>' : ''}<div class="top-end"><span class="avatar" aria-hidden="true">${esc(initials(user))}</span><button class="icon-btn" id="menu" aria-label="Open navigation" aria-controls="drawer" aria-expanded="false">${icon('menu')}</button></div></header><main class="container" id="main"></main><div class="overlay" id="overlay"></div><aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Navigation"><div class="drawer-head"><h2>Replay Chat</h2><button class="icon-btn" id="close-menu" aria-label="Close navigation">${icon('close')}</button></div><div class="eyebrow">Workspace</div>${navLink('chat', 'Chat', page)}${navLink('replay', 'Replay', page)}${navLink('agents', 'AI agents', page)}${navLink('account', 'Account', page)}<div class="drawer-user">${user ? `<span class="drawer-username">${esc(user.username)}</span>` : ''}<button type="button" class="btn" id="logout">Log out</button></div><div class="drawer-bottom">Same prompts, different results.<br>Compare models, GPU hardware, and kernels.</div></aside>`;
+  return `<header class="topbar"><a class="brand" href="/" ${withMenu ? 'aria-label="Replay Chat"' : ''}><span class="brand-mark"><img src="/replay-chat-150.png" alt="" width="35" height="35"></span>${withMenu ? '' : 'Replay Chat'}</a>${withMenu ? '<div class="topbar-file" id="topbar-file"></div>' : ''}<div class="top-end"><span class="avatar" aria-hidden="true">${esc(initials(user))}</span><button class="icon-btn" id="menu" aria-label="Open navigation" aria-controls="drawer" aria-expanded="false">${icon('menu')}</button></div></header><main class="container" id="main"></main><div class="overlay" id="overlay"></div><aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Navigation"><div class="drawer-head"><h2>Replay Chat</h2><button class="icon-btn" id="close-menu" aria-label="Close navigation">${icon('close')}</button></div><div class="eyebrow">Workspace</div>${navLink('chat', 'Chat', page)}${navLink('replay', 'Replay', page)}${navLink('agents', 'AI agents', page)}${navLink('account', 'Account', page)}<div class="drawer-user">${user ? `<span class="drawer-username">${esc(user.username)}</span>` : ''}<button type="button" class="btn" id="logout">Log out</button></div><div class="drawer-bottom">Same prompts, different results.<br>Compare models, GPU hardware, and kernels.</div></aside>`;
 };
 
 export const footerHTML = () =>

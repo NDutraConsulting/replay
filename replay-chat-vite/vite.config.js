@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
+import { cleanUrlsPlugin } from './build/clean-urls.js';
 
 // The FastAPI backend (backend/, `./run.sh`). In development and preview, /api is proxied to it,
 // so the browser sees one origin: the session cookie just works and no CORS is involved.
@@ -8,6 +9,7 @@ const proxy = { '/api': { target: backend, changeOrigin: false } };
 
 // Multi-page app: one HTML entry per page/feature.
 export default defineConfig({
+  plugins: [cleanUrlsPlugin()], // /account, not /account.html
   server: { proxy },
   preview: { proxy },
   build: {

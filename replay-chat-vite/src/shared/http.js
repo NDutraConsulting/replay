@@ -17,8 +17,8 @@ export class ApiError extends Error {
 const BASE = import.meta.env?.VITE_API_BASE_URL ?? '';
 
 export function redirectToLogin() {
-  if (location.pathname.endsWith('/login.html')) return;
-  location.assign('/login.html?next=' + encodeURIComponent(location.pathname + location.search));
+  if (/^\/login(\.html)?$/.test(location.pathname)) return;
+  location.assign('/login?next=' + encodeURIComponent(location.pathname + location.search));
 }
 
 let onUnauthorized = redirectToLogin;

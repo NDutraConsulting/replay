@@ -6,7 +6,7 @@ const $ = (id) => document.getElementById(id);
 
 async function boot({ user = null, search = '', tourSeen = null } = {}) {
   vi.resetModules();
-  history.replaceState({}, '', '/login.html' + search);
+  history.replaceState({}, '', '/login' + search);
   const go = vi.fn();
   const mock = mockApi({
     'GET /api/me': () => user ?? apiError(401, 'not_logged_in', 'Not logged in.'),
@@ -44,7 +44,7 @@ describe('login page', () => {
     const { go } = await boot({ tourSeen: false });
     fill('demo', 'right-password');
     await settle();
-    expect(go).toHaveBeenCalledWith('/account.html');
+    expect(go).toHaveBeenCalledWith('/account');
   });
 
   it('does not redirect once the tour was seen, and keeps an explicit ?next=', async () => {
@@ -53,10 +53,10 @@ describe('login page', () => {
     await settle();
     expect(seen.go).toHaveBeenCalledWith('/');
     document.body.innerHTML = '';
-    const deep = await boot({ tourSeen: false, search: '?next=/replay.html' });
+    const deep = await boot({ tourSeen: false, search: '?next=/replay' });
     fill('demo', 'right-password');
     await settle();
-    expect(deep.go).toHaveBeenCalledWith('/replay.html');
+    expect(deep.go).toHaveBeenCalledWith('/replay');
   });
 
   it('shows the server message for wrong credentials and lets the user retry', async () => {
@@ -78,10 +78,10 @@ describe('login page', () => {
   });
 
   it('returns to the page the user was sent from, but only a same-site path', async () => {
-    const { go } = await boot({ search: '?next=%2Freplay.html%3Ftab%3Ddiff' });
+    const { go } = await boot({ search: '?next=%2Freplay%3Ftab%3Ddiff' });
     fill('demo', 'right-password');
     await settle();
-    expect(go).toHaveBeenCalledWith('/replay.html?tab=diff');
+    expect(go).toHaveBeenCalledWith('/replay?tab=diff');
     const evil = await boot({ search: '?next=%2F%2Fevil.example%2Fx' });
     fill('demo', 'right-password');
     await settle();
@@ -89,8 +89,8 @@ describe('login page', () => {
   });
 
   it('skips the form when already logged in', async () => {
-    const { go } = await boot({ user: { user_id: 'u1', username: 'demo' }, search: '?next=%2Fagents.html' });
-    expect(go).toHaveBeenCalledWith('/agents.html');
+    const { go } = await boot({ user: { user_id: 'u1', username: 'demo' }, search: '?next=%2Fagents' });
+    expect(go).toHaveBeenCalledWith('/agents');
     expect($('login-form')).toBeNull();
   });
 
@@ -123,7 +123,7 @@ describe('login page', () => {
 describe('login helpers', () => {
   it.each([
     ['', '/'],
-    ['?next=/replay.html', '/replay.html'],
+    ['?next=/replay', '/replay'],
     ['?next=%2F%2Fevil.example', '/'],
     ['?next=https%3A%2F%2Fevil.example', '/'],
     ['?next=%2F%5Cevil.example', '/'],

@@ -94,6 +94,15 @@ describe('account page', () => {
       expect(document.activeElement).toBe($('new-api-provider'));
     });
 
+    it('a button above "Your keys stay on the server" takes the tour again', async () => {
+      await boot([], { tourSeen: true });
+      const aside = document.querySelector('.account-aside');
+      expect(aside.firstElementChild).toBe($('restart-tour'));
+      expect(text(aside.querySelector('h3'))).toBe('Your keys stay on the server.');
+      $('restart-tour').click();
+      expect(text(tour().querySelector('h2'))).toBe('Set up your API · 1 of 2');
+    });
+
     it('skipping marks it seen too, so it never comes back', async () => {
       const { mock } = await boot([], { tourSeen: false });
       click('Skip tour');

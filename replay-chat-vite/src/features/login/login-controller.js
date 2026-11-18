@@ -38,7 +38,7 @@ export async function initLogin({ go = (url) => location.assign(url) } = {}) {
       return showError(err.message);
     }
     // A first login lands on the Account page, which starts the API setup tour (unless the user was heading somewhere specific).
-    go(next === '/' && !(await apiTourSeen()) ? '/account.html' : next);
+    go(next === '/' && !(await apiTourSeen()) ? '/account' : next);
   }
 
   render();

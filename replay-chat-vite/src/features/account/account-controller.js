@@ -64,6 +64,7 @@ export const initAccount = () =>
         ev.preventDefault();
         return add();
       };
+      e.restartTour.onclick = () => runTour();
       e.provider.onchange = () => applyPreset(e.provider.value);
       document.querySelectorAll('.show-key').forEach((b) => (b.onclick = () => toggleKeyVisibility(b)));
       if (!e.form) return;

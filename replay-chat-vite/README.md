@@ -7,7 +7,8 @@ Vite + Vitest rewrite of `../replay-chat`, organized with domain-driven design p
 Each page is a feature. HTML entry files live at the project root (Vite multi-page requirement); everything else is grouped by feature:
 
 ```
-index.html | replay.html | agents.html | account.html | login.html     # one HTML5 entry per page
+index.html | replay.html | agents.html | account.html | login.html     # one HTML5 entry per page, served at / /replay /agents /account /login
+build/clean-urls.js                                                   # the Vite plugin behind those clean URLs (a deployed dist/ needs the same rule from its host)
 src/features/{feature}/
   {feature}.css                              # page styles
   {feature}-controller.js                    # orchestrates api + ui
@@ -25,7 +26,7 @@ preferences all live on the server (`../backend`); the API key is write-only and
 than `src/shared/http.js` calls `fetch`.
 
 - `shared/http.js` is the only code that talks to the backend: JSON, the session cookie, and every failure normalized to
-  `ApiError { status, code, message }` (`message` is shown to the user). A 401 sends the browser to `/login.html`.
+  `ApiError { status, code, message }` (`message` is shown to the user). A 401 sends the browser to `/login`.
 - Every page starts with `startPage()` (`shared/shell-ui.js`): load the user, agents, settings and preferences, mount the shell,
   then run the page; a failed load shows an error with a retry.
 - **Stop** (chat and replay) sends a client-generated request id with every send/step. The stop command names it, so it still

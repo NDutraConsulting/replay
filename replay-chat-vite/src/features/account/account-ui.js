@@ -38,7 +38,7 @@ export function apiPanelHTML(state) {
 
 /** @param {{connections: object[], selectedId: string|null}} state */
 export const accountHTML = (state) =>
-  `<div class="account-grid"><div class="account-main">${addApiHTML()}<div id="api-panel-slot">${apiPanelHTML(state)}</div></div><aside class="account-aside"><div class="circle-icon">${icon('lock')}</div><h3>Your keys stay on the server.</h3><p>Replay Chat’s server calls the APIs you configure on your behalf, so your keys never have to live in your browser.</p><ul><li>Use your provider’s model IDs.</li><li>Use HTTPS for hosted APIs.</li><li>The server must be able to reach each API URL.</li></ul><div class="account-notice">Your API keys are encrypted at rest. Conversations and replay results are saved to your account.</div><p class="account-cost-note">API requests may incur charges with your provider. Test connection sends one short request.</p></aside></div>${footerHTML()}`;
+  `<div class="account-grid"><div class="account-main">${addApiHTML()}<div id="api-panel-slot">${apiPanelHTML(state)}</div></div><aside class="account-aside"><button type="button" class="btn" id="restart-tour">${icon('link')}Take the API setup tour again</button><div class="circle-icon">${icon('lock')}</div><h3>Your keys stay on the server.</h3><p>Replay Chat’s server calls the APIs you configure on your behalf, so your keys never have to live in your browser.</p><ul><li>Use your provider’s model IDs.</li><li>Use HTTPS for hosted APIs.</li><li>The server must be able to reach each API URL.</li></ul><div class="account-notice">Your API keys are encrypted at rest. Conversations and replay results are saved to your account.</div><p class="account-cost-note">API requests may incur charges with your provider. Test connection sends one short request.</p></aside></div>${footerHTML()}`;
 
 /** The tour's steps: what to read, and what the next button says. Each is the body of a popup. */
 export const TOUR_STEPS = [
@@ -60,6 +60,7 @@ export const TOUR_STEPS = [
 
 export const els = () => ({
   addForm: document.getElementById('add-api-form'),
+  restartTour: document.getElementById('restart-tour'),
   provider: document.getElementById('new-api-provider'),
   providerNote: document.getElementById('new-api-provider-note'),
   newLabel: document.getElementById('new-api-label'),
