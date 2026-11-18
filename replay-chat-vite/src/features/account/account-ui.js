@@ -29,7 +29,7 @@ export function apiPanelHTML(state) {
   const off = current.readOnly ? 'disabled' : '';
   const actions = current.readOnly
     ? `<button type="button" class="btn" id="test-api">${icon('link')}Test connection</button>`
-    : `<button class="btn yellow" type="submit">${icon('check')}Save API</button><button type="button" class="btn" id="test-api">${icon('link')}Test connection</button><button type="button" class="btn danger" id="delete-api">${icon('trash')}Delete API</button>`;
+    : `<button type="button" class="btn" id="add-models">${icon('plus')}Add models</button><button class="btn yellow" type="submit">${icon('check')}Save API</button><button type="button" class="btn" id="test-api">${icon('link')}Test connection</button><button type="button" class="btn danger" id="delete-api">${icon('trash')}Delete API</button>`;
   const note = current.readOnly
     ? '<p class="small api-read-only">This API comes from the server’s .env (OPENAI_API_KEY). It is shared by every account and cannot be changed here.</p>'
     : '';
@@ -55,6 +55,7 @@ export const els = () => ({
   models: document.getElementById('model-ids'),
   test: document.getElementById('test-api'),
   remove: document.getElementById('delete-api'),
+  addModels: document.getElementById('add-models'),
   status: document.getElementById('connection-status'),
 });
 
@@ -82,7 +83,7 @@ export function applyPreset(id) {
 
 export const readAddForm = () => {
   const e = els();
-  return { label: e.newLabel.value, url: e.newUrl.value, key: e.newKey.value };
+  return { label: e.newLabel.value, url: e.newUrl.value, key: e.newKey.value, modelsText: (presetById(e.provider.dataset.preset)?.models ?? []).join('\n') };
 };
 
 export const readApiForm = () => {

@@ -1,9 +1,9 @@
 import '../../shared/styles/base.css';
 import './account.css';
-import { choiceDialog } from '../../shared/modal-ui.js';
+import { choiceDialog, showModal } from '../../shared/modal-ui.js';
 import { startPage } from '../../shared/shell-ui.js';
 import { toast, toastError } from '../../shared/toast.js';
-import { addConnection, deleteConnection, listConnections, saveConnection, testConnection } from './account-api.js';
+import { addConnection, deleteConnection, parseModels, listConnections, saveConnection, testConnection } from './account-api.js';
 import {
   accountHTML, applyPreset, els, readAddForm, readApiForm, renderApiPanel, setStatus, setTesting, toggleKeyVisibility,
 } from './account-ui.js';
@@ -39,7 +39,7 @@ export const initAccount = () =>
       state.connections = [...state.connections.filter((c) => !c.readOnly), made, ...server];
       state.selectedId = made.id;
       render(); // a fresh add form, and the models panel on the new API
-      setStatus('Added. Now add the models this API serves, then save.');
+      setStatus(made.models.length ? 'Added with its models. Add more with Add models, or test it.' : 'Added. Now add the models this API serves, then save.');
       els().models?.focus();
       toast(`Added the API “${made.label}”.`);
     }
@@ -85,6 +85,19 @@ export const initAccount = () =>
         if (!(await save())) return;
         await runTest(current());
       };
+      e.addModels.onclick = () =>
+        showModal({
+          title: `Add models to ${current().label}`,
+          bodyHTML: '<div class="field"><label class="field-label" for="extra-models">Model IDs</label><textarea id="extra-models" spellcheck="false" placeholder="model-a&#10;model-b"></textarea><small>One model ID per line. Use the exact IDs this API accepts.</small></div>',
+          submitLabel: 'Add models',
+          onSubmit: async (form) => {
+            const extra = parseModels(form.querySelector('#extra-models').value);
+            if (!extra.length) return 'Enter at least one model ID.';
+            e.models.value = [...new Set([...parseModels(e.models.value), ...extra])].join('\n');
+            if (!(await save())) return 'Could not save. See the message above.';
+            setStatus(`Added ${extra.length} ${extra.length === 1 ? 'model' : 'models'}. Test it to verify access.`);
+          },
+        });
       e.remove.onclick = async () => {
         const api = current();
         const answer = await choiceDialog({

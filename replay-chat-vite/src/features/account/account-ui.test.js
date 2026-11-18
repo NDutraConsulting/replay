@@ -61,7 +61,7 @@ describe('account ui', () => {
       expect(els().newLabel.value).toBe(label);
       expect(els().newKey.placeholder).toBe('Enter this API’s key');
       expect(els().providerNote.textContent).toContain('API key');
-      expect(readAddForm()).toEqual({ label, url, key: '' });
+      expect(readAddForm()).toMatchObject({ label, url, key: '' });
     });
 
     it('choosing Custom clears the URL, offers a local example, and says no key is needed', () => {
@@ -160,7 +160,7 @@ describe('account ui', () => {
     els().newLabel.value = ' L ';
     els().newUrl.value = 'https://n.test';
     els().newKey.value = 'k1';
-    expect(readAddForm()).toEqual({ label: ' L ', url: 'https://n.test', key: 'k1' });
+    expect(readAddForm()).toMatchObject({ label: ' L ', url: 'https://n.test', key: 'k1' });
     els().url.value = 'https://u.test';
     els().key.value = 'k2';
     els().models.value = 'x\ny';

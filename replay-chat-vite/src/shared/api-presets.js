@@ -7,8 +7,11 @@
  * compatibility (generativelanguage.googleapis.com/v1beta/openai); Fireworks AI (api.fireworks.ai/inference/v1);
  * Featherless AI (api.featherless.ai/v1).
  */
+/** The OpenAI models offered as soon as OpenAI is added (the same list as the server's OPENAI_MODELS default). */
+export const OPENAI_MODELS = ['gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'];
+
 export const API_PRESETS = [
-  { id: 'openai', name: 'OpenAI', label: 'OpenAI', url: 'https://api.openai.com/v1', needsKey: true, note: 'OpenAI’s API. Use an OpenAI API key.' },
+  { id: 'openai', name: 'OpenAI', label: 'OpenAI', url: 'https://api.openai.com/v1', needsKey: true, note: 'OpenAI’s API. Use an OpenAI API key. Its models are filled in for you; add more later with Add models.', models: OPENAI_MODELS },
   {
     id: 'anthropic', name: 'Anthropic', label: 'Anthropic', url: 'https://api.anthropic.com/v1', needsKey: true,
     note: 'Anthropic’s OpenAI-compatible endpoint, meant for trying Claude models. It supports Chat Completions only and ignores some OpenAI fields. Use a Claude API key.',

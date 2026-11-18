@@ -211,6 +211,38 @@ describe('account page', () => {
     expect(text($('connection-status'))).toBe('Saved. Test it to verify access.');
   });
 
+  it('preloads the OpenAI models when OpenAI is chosen as the provider', async () => {
+    const { mock } = await boot();
+    $('new-api-provider').value = 'openai';
+    $('new-api-provider').dispatchEvent(new Event('change'));
+    $('new-api-key').value = 'sk-x';
+    $('add-api-form').requestSubmit();
+    await settle();
+    const models = mock.lastBody('POST /api/connections').models;
+    expect(models).toContain('gpt-5.5');
+    expect(models.length).toBeGreaterThan(3);
+    expect($('model-ids').value.split('\n')).toEqual(models);
+  });
+
+  it('adds extra models from a popup and saves them next to the existing ones', async () => {
+    const { mock } = await boot([wire('c1', 'Fast', { models: ['m1'] })]);
+    $('add-models').click();
+    document.getElementById('extra-models').value = 'm2, m1\nm3';
+    document.querySelector('.modal-form').requestSubmit();
+    await settle();
+    expect(mock.lastBody('PUT /api/connections/:id').models).toEqual(['m1', 'm2', 'm3']);
+    expect($('model-ids').value).toBe('m1\nm2\nm3');
+    expect(document.querySelector('.modal')).toBeNull();
+  });
+
+  it('keeps the Add models popup open when no model ID is entered', async () => {
+    await boot([wire('c1', 'Fast')]);
+    $('add-models').click();
+    document.querySelector('.modal-form').requestSubmit();
+    await settle();
+    expect(document.querySelector('.modal-error').textContent).toMatch(/at least one/);
+  });
+
   it('sends a new key only when one is typed, and forgets it afterwards', async () => {
     const { mock } = await boot([wire('c1', 'Fast', { models: ['m1'] })]);
     $('api-form').requestSubmit();
