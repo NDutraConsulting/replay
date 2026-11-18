@@ -198,6 +198,13 @@ const openTab = async (id) => {
 const progress = () => text(document.querySelector('.progress-row'));
 
 describe('replay page', () => {
+  it('opens no intro popup when the drawer\'s Page popups switch is off, and does when it is on', async () => {
+    await boot({ keepIntro: true, appOverrides: { preferences: { agent_id: 'assistant', model: null, chat_sidebar_hidden: false, replay_prompts_hidden: true, show_page_popups: false } } });
+    expect(document.querySelector('.replay-intro-modal')).toBeNull();
+    await boot({ keepIntro: true });
+    expect(document.querySelector('.replay-intro-modal')).not.toBeNull();
+  });
+
   beforeEach(() => {
     document.body.innerHTML = '';
   });

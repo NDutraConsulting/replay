@@ -25,6 +25,7 @@ export const toPreferences = (p) => ({
   replayPromptsHidden: p.replay_prompts_hidden,
   showCompactButton: p.show_compact_button ?? false, // the Chat page's Compact button: off unless turned on in Config
   showRewindButton: p.show_rewind_button ?? true, // the Chat page's Rewind button: on unless turned off in Config
+  showPagePopups: p.show_page_popups ?? true, // popups that open with a page (the drawer's switch)
   apiTourSeen: p.api_tour_seen ?? true, // the first-login API setup tour (Account page) was finished or skipped
 });
 
@@ -39,7 +40,7 @@ export async function loadApp() {
   return { user, agents, settings: toSettings(settings), preferences: toPreferences(preferences) };
 }
 
-/** @param {{agentId?: string, model?: string|null, chatSidebarHidden?: boolean, replayPromptsHidden?: boolean, showCompactButton?: boolean, showRewindButton?: boolean, apiTourSeen?: boolean}} changes */
+/** @param {{agentId?: string, model?: string|null, chatSidebarHidden?: boolean, replayPromptsHidden?: boolean, showCompactButton?: boolean, showRewindButton?: boolean, apiTourSeen?: boolean, showPagePopups?: boolean}} changes */
 export async function savePreferences(changes) {
   const body = {};
   if ('agentId' in changes) body.agent_id = changes.agentId;
@@ -48,6 +49,7 @@ export async function savePreferences(changes) {
   if ('replayPromptsHidden' in changes) body.replay_prompts_hidden = changes.replayPromptsHidden;
   if ('showCompactButton' in changes) body.show_compact_button = changes.showCompactButton;
   if ('showRewindButton' in changes) body.show_rewind_button = changes.showRewindButton;
+  if ('showPagePopups' in changes) body.show_page_popups = changes.showPagePopups;
   if ('apiTourSeen' in changes) body.api_tour_seen = changes.apiTourSeen;
   return toPreferences(await api.put('/api/preferences', body));
 }

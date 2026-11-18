@@ -12,11 +12,11 @@ const wire = (id, label, extra = {}) => ({
 }); // fmt: skip
 
 /** An in-memory fake of the connections routes. */
-async function boot(initial = [], { tourSeen = true } = {}) {
+async function boot(initial = [], { tourSeen = true, popups = true } = {}) {
   vi.resetModules();
   setUnauthorizedHandler(vi.fn());
   const base = appRoutes().state.preferences;
-  const { routes } = appRoutes({ preferences: { ...base, api_tour_seen: tourSeen } });
+  const { routes } = appRoutes({ preferences: { ...base, api_tour_seen: tourSeen, show_page_popups: popups } });
   const server = { apis: initial.map((a) => structuredClone(a)), next: 1, tests: [], failTest: null };
   const find = (id) => server.apis.find((a) => a.connection_id === id);
   const mock = mockApi({
@@ -70,6 +70,13 @@ describe('account page', () => {
     it('does not open for someone who has already seen it', async () => {
       await boot([], { tourSeen: true });
       expect(tour()).toBeNull();
+    });
+
+    it('stays closed when the drawer switch has page popups off, but the button still opens it', async () => {
+      await boot([], { tourSeen: false, popups: false });
+      expect(tour()).toBeNull();
+      $('restart-tour').click();
+      expect(tour()).not.toBeNull();
     });
 
     it('opens on step 1 with the provider dashboard links, OpenAI first', async () => {

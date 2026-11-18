@@ -372,6 +372,7 @@ export const initChat = () =>
     render();
     // Returning to the page: ask what to do. Dismissing the popup keeps the chat that is on screen behind it. (A locked chat
     // is not forked here: its banner offers that, and opening a locked chat from the list asks first.)
+    if (app.preferences.showPagePopups === false) return; // the drawer's Page popups switch is off: show the chat as it is
     const tour = await tourLesson('chat'); // offered only to someone who has not finished a lesson yet
     choiceDialog({
       title: 'Welcome back',

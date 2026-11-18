@@ -58,6 +58,47 @@ describe('shell', () => {
     expect(document.querySelector('.toast').textContent).toBe('Server error.');
   });
 
+  describe('page popups switch', () => {
+    const user = { user_id: 'u1', username: 'nikko' };
+    const toggle = () => document.getElementById('page-popups');
+
+    it('is an iOS-style switch directly above the username and Log out row', () => {
+      mountShell('chat', user, { showPagePopups: true });
+      expect(toggle().classList.contains('switch')).toBe(true);
+      expect(toggle().getAttribute('role')).toBe('switch');
+      expect(toggle().checked).toBe(true);
+      expect(toggle().closest('.drawer-toggle').nextElementSibling.classList.contains('drawer-user')).toBe(true);
+    });
+
+    it('shows the saved state, and is absent when nobody is logged in', () => {
+      mountShell('chat', user, { showPagePopups: false });
+      expect(toggle().checked).toBe(false);
+      mountShell('chat', null);
+      expect(toggle()).toBeNull();
+    });
+
+    it('saves a change to the server and updates the page\'s copy of the preference', async () => {
+      const prefs = { showPagePopups: true };
+      const mock = mockApi({ 'PUT /api/preferences': ({ body }) => body });
+      mountShell('chat', user, prefs);
+      toggle().click();
+      await settle();
+      expect(mock.lastBody('PUT /api/preferences')).toEqual({ show_page_popups: false });
+      expect(prefs.showPagePopups).toBe(false);
+    });
+
+    it('puts the switch back and says why when saving fails', async () => {
+      const prefs = { showPagePopups: true };
+      mockApi({ 'PUT /api/preferences': apiError(500, 'oops', 'Server error.') });
+      mountShell('chat', user, prefs);
+      toggle().click();
+      await settle();
+      expect(toggle().checked).toBe(true);
+      expect(prefs.showPagePopups).toBe(true);
+      expect(document.querySelector('.toast').textContent).toBe('Server error.');
+    });
+  });
+
   it('renders loading and fatal states', () => {
     const main = mountShell('chat', null);
     showLoading(main);

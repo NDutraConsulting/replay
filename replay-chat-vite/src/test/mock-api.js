@@ -70,7 +70,7 @@ export function appRoutes(overrides = {}) {
     ],
     settings: { models: ['model-a', 'model-b', 'model-c'], connected: false, connections: [] },
     lessons: [],
-    preferences: { agent_id: 'assistant', model: null, chat_sidebar_hidden: false, replay_prompts_hidden: true, show_compact_button: false, show_rewind_button: true, api_tour_seen: true },
+    preferences: { agent_id: 'assistant', model: null, chat_sidebar_hidden: false, replay_prompts_hidden: true, show_compact_button: false, show_rewind_button: true, api_tour_seen: true, show_page_popups: true },
     ...overrides,
   };
   const routes = {

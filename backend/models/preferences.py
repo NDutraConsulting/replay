@@ -15,6 +15,8 @@ class UserPreferences(BaseModel):
     """The Chat page's Compact button is shown only when the user turns it on in Config (off by default)."""
     show_rewind_button: bool = True
     """The Chat page's Rewind button (it enters rewind mode) is shown unless the user turns it off in Config."""
+    show_page_popups: bool = True
+    """Popups that appear when a page opens are shown (the navigation drawer's switch)."""
     api_tour_seen: bool = False
     """The first-login API setup tour on the Account page has been finished or skipped."""
     updated_at: datetime | None = None
@@ -27,6 +29,7 @@ class PreferencesView(BaseModel):
     replay_prompts_hidden: bool
     show_compact_button: bool
     show_rewind_button: bool
+    show_page_popups: bool
     api_tour_seen: bool
 
 
@@ -40,4 +43,5 @@ class UpdatePreferencesRequest(BaseModel):
     replay_prompts_hidden: bool | None = None
     show_compact_button: bool | None = None
     show_rewind_button: bool | None = None
+    show_page_popups: bool | None = None
     api_tour_seen: bool | None = None

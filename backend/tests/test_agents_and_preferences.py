@@ -20,6 +20,7 @@ def test_preferences_defaults_keep_the_replay_prompts_panel_closed(logged_in_cli
         "replay_prompts_hidden": True,
         "show_compact_button": False,
         "show_rewind_button": True,
+        "show_page_popups": True,
         "api_tour_seen": False,
     }
 
@@ -35,6 +36,7 @@ def test_preferences_update_only_the_fields_sent(logged_in_client):
         "replay_prompts_hidden": False,
         "show_compact_button": False,
         "show_rewind_button": True,
+        "show_page_popups": True,
         "api_tour_seen": False,
     }
     assert logged_in_client.get("/api/preferences").json() == second
@@ -89,6 +91,7 @@ async def test_concurrent_preference_updates_do_not_overwrite_each_other(async_c
         "replay_prompts_hidden": False,
         "show_compact_button": False,
         "show_rewind_button": True,
+        "show_page_popups": True,
         "api_tour_seen": False,
     }
 
@@ -102,6 +105,7 @@ def test_the_first_update_creates_the_row_with_defaults_for_everything_else(logg
         "replay_prompts_hidden": True,
         "show_compact_button": False,
         "show_rewind_button": True,
+        "show_page_popups": True,
         "api_tour_seen": False,
     }
 
@@ -157,7 +161,7 @@ def test_preferences_saved_before_the_migration_get_the_defaults(tmp_path):
             "INSERT INTO users (user_id, username, password_hash, created_at) VALUES ('u', 'u', 'x', '2026-01-01')"
         )
         conn.execute("INSERT INTO user_preferences (user_id, updated_at) VALUES ('u', '2026-01-01')")
-    assert apply_migrations(db) == [18, 19]
+    assert apply_migrations(db) == [18, 19, 20]
     row = sqlite3.connect(db).execute(
         "SELECT show_compact_button, show_rewind_button, api_tour_seen FROM user_preferences"
     ).fetchone()
@@ -168,3 +172,10 @@ def test_api_tour_seen_starts_false_and_can_be_set(logged_in_client):
     assert logged_in_client.get("/api/preferences").json()["api_tour_seen"] is False
     assert logged_in_client.put("/api/preferences", json={"api_tour_seen": True}).json()["api_tour_seen"] is True
     assert logged_in_client.put("/api/preferences", json={"api_tour_seen": None}).status_code == 422
+
+
+def test_page_popups_default_on_and_can_be_switched_off(logged_in_client):
+    assert logged_in_client.get("/api/preferences").json()["show_page_popups"] is True
+    assert logged_in_client.put("/api/preferences", json={"show_page_popups": False}).json()["show_page_popups"] is False
+    assert logged_in_client.get("/api/preferences").json()["show_page_popups"] is False
+    assert logged_in_client.put("/api/preferences", json={"show_page_popups": None}).status_code == 422

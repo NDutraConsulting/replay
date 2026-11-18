@@ -1,4 +1,4 @@
-import { loadApp, logout } from './app-api.js';
+import { loadApp, logout, savePreferences } from './app-api.js';
 import { redirectToLogin } from './http.js';
 import { esc } from './html.js';
 import { icon } from './icons.js';
@@ -14,9 +14,9 @@ const initials = (user) => (user?.username || 'RC').slice(0, 2).toUpperCase();
 /** Pages with a File menu show it in the navbar, in place of the brand text (the logo stays). The others keep the text. */
 const FILE_MENU_PAGES = ['chat', 'replay', 'agents'];
 
-export const shellHTML = (page, user) => {
+export const shellHTML = (page, user, showPagePopups = true) => {
   const withMenu = FILE_MENU_PAGES.includes(page);
-  return `<header class="topbar"><a class="brand" href="/" ${withMenu ? 'aria-label="Replay Chat"' : ''}><span class="brand-mark"><img src="/replay-chat-150.png" alt="" width="35" height="35"></span>${withMenu ? '' : 'Replay Chat'}</a>${withMenu ? '<div class="topbar-file" id="topbar-file"></div>' : ''}<div class="top-end"><span class="avatar" aria-hidden="true">${esc(initials(user))}</span><button class="icon-btn" id="menu" aria-label="Open navigation" aria-controls="drawer" aria-expanded="false">${icon('menu')}</button></div></header><main class="container" id="main"></main><div class="overlay" id="overlay"></div><aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Navigation"><div class="drawer-head"><h2>Replay Chat</h2><button class="icon-btn" id="close-menu" aria-label="Close navigation">${icon('close')}</button></div><div class="eyebrow">Workspace</div>${navLink('chat', 'Chat', page)}${navLink('replay', 'Replay', page)}${navLink('agents', 'AI agents', page)}${navLink('account', 'Account', page)}<div class="drawer-user">${user ? `<span class="drawer-username">${esc(user.username)}</span>` : ''}<button type="button" class="btn" id="logout">Log out</button></div><div class="drawer-bottom">Same prompts, different results.<br>Compare models, GPU hardware, and kernels.</div></aside>`;
+  return `<header class="topbar"><a class="brand" href="/" ${withMenu ? 'aria-label="Replay Chat"' : ''}><span class="brand-mark"><img src="/replay-chat-150.png" alt="" width="35" height="35"></span>${withMenu ? '' : 'Replay Chat'}</a>${withMenu ? '<div class="topbar-file" id="topbar-file"></div>' : ''}<div class="top-end"><span class="avatar" aria-hidden="true">${esc(initials(user))}</span><button class="icon-btn" id="menu" aria-label="Open navigation" aria-controls="drawer" aria-expanded="false">${icon('menu')}</button></div></header><main class="container" id="main"></main><div class="overlay" id="overlay"></div><aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Navigation"><div class="drawer-head"><h2>Replay Chat</h2><button class="icon-btn" id="close-menu" aria-label="Close navigation">${icon('close')}</button></div><div class="eyebrow">Workspace</div>${navLink('chat', 'Chat', page)}${navLink('replay', 'Replay', page)}${navLink('agents', 'AI agents', page)}${navLink('account', 'Account', page)}${user ? `<div class="drawer-toggle"><label for="page-popups">Page popups</label><input type="checkbox" role="switch" class="switch" id="page-popups" aria-describedby="page-popups-hint" ${showPagePopups ? 'checked' : ''}><small id="page-popups-hint">Tips that pop up when a page opens.</small></div>` : ''}<div class="drawer-user">${user ? `<span class="drawer-username">${esc(user.username)}</span>` : ''}<button type="button" class="btn" id="logout">Log out</button></div><div class="drawer-bottom">Same prompts, different results.<br>Compare models, GPU hardware, and kernels.</div></aside>`;
 };
 
 export const footerHTML = () =>
@@ -40,12 +40,25 @@ export function toggleDrawer(open) {
 }
 
 /** Render the shared page chrome and wire the navigation drawer. */
-export function mountShell(page, user) {
-  document.body.innerHTML = shellHTML(page, user);
+export function mountShell(page, user, preferences = null) {
+  document.body.innerHTML = shellHTML(page, user, preferences?.showPagePopups ?? true);
   document.getElementById('drawer').inert = true;
   document.getElementById('menu').onclick = () => toggleDrawer(true);
   document.getElementById('close-menu').onclick = () => toggleDrawer(false);
   document.getElementById('overlay').onclick = () => toggleDrawer(false);
+  const popups = document.getElementById('page-popups');
+  if (popups) {
+    popups.onchange = async () => {
+      const on = popups.checked;
+      try {
+        await savePreferences({ showPagePopups: on });
+      } catch (err) {
+        popups.checked = !on; // not saved: show the real state
+        return toastError(err);
+      }
+      if (preferences) preferences.showPagePopups = on; // the page's own copy, so it follows the switch
+    };
+  }
   document.getElementById('logout').onclick = async () => {
     try {
       await logout();
@@ -99,7 +112,7 @@ export async function startPage(page, build) {
     showFatal(mountShell(page, null), err, () => startPage(page, build));
     return null;
   }
-  const main = mountShell(page, app.user);
+  const main = mountShell(page, app.user, app.preferences);
   try {
     return await build(main, app);
   } catch (err) {

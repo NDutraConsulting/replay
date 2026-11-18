@@ -541,6 +541,7 @@ export const initReplay = () =>
       onLessons: () => openLessonsList('replay', lessonPlayer),
     });
     render();
+    if (app.preferences.showPagePopups === false) return; // the drawer's Page popups switch is off
     const lesson = await firstLesson('replay');
     openReplayIntro(lesson ? () => lessonPlayer.start(lesson.slug).catch(toastError) : null); // what this page is for, shown each time it opens, with a way into the lesson
   });

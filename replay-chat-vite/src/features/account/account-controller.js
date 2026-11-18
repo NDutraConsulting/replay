@@ -159,7 +159,7 @@ export const initAccount = () =>
     }
 
     render();
-    if (app.preferences.apiTourSeen === false) runTour();
+    if (app.preferences.apiTourSeen === false && app.preferences.showPagePopups !== false) runTour(); // the drawer's switch can turn this off
   });
 
 initAccount();

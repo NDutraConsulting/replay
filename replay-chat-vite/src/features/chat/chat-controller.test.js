@@ -207,6 +207,17 @@ const field = (name) => modal().elements?.[name] ?? modal().querySelector(`[name
 const messageCopies = () => [...document.querySelectorAll('.message-copy')].map((e) => e.textContent);
 
 describe('chat page', () => {
+  it('opens no Welcome back popup when the drawer\'s Page popups switch is off', async () => {
+    await boot({ keepArrival: true, appOverrides: { preferences: { agent_id: 'assistant', model: null, chat_sidebar_hidden: false, replay_prompts_hidden: true, show_page_popups: false } } });
+    expect(document.querySelector('.modal')).toBeNull();
+    expect($('chat-form')).not.toBeNull();
+  });
+
+  it('opens the Welcome back popup when the switch is on', async () => {
+    await boot({ keepArrival: true });
+    expect(document.querySelector('.modal-head h2').textContent).toBe('Welcome back');
+  });
+
   beforeEach(() => {
     document.body.innerHTML = '';
   });
