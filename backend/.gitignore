@@ -1,6 +1,7 @@
 app.db*
 knowledgebase.db*
 Log.db*
+lessons.db*
 .venv/
 __pycache__/
 .pytest_cache/

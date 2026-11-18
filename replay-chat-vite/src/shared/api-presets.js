@@ -2,6 +2,8 @@
  * The APIs the Account page can fill in for you. Each has the base URL of its OpenAI-compatible Chat Completions endpoint
  * (the server adds /chat/completions). "Custom" has none: it is for an API on your own machine or network.
  *
+ * `dashboardUrl` is where the provider's account holder signs in to create an API key (the account tour lists them).
+ *
  * Sources (checked November 2026): OpenAI api.openai.com/v1; Anthropic's OpenAI SDK compatibility layer
  * (api.anthropic.com/v1: a way to try Claude models, Chat Completions only, some OpenAI fields ignored); Gemini's OpenAI
  * compatibility (generativelanguage.googleapis.com/v1beta/openai); Fireworks AI (api.fireworks.ai/inference/v1);
@@ -11,21 +13,21 @@
 export const OPENAI_MODELS = ['gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'];
 
 export const API_PRESETS = [
-  { id: 'openai', name: 'OpenAI', label: 'OpenAI', url: 'https://api.openai.com/v1', needsKey: true, note: 'OpenAI’s API. Use an OpenAI API key. Its models are filled in for you; add more later with Add models.', models: OPENAI_MODELS },
+  { id: 'openai', name: 'OpenAI', label: 'OpenAI', url: 'https://api.openai.com/v1', dashboardUrl: 'https://platform.openai.com/login', needsKey: true, note: 'OpenAI’s API. Use an OpenAI API key. Its models are filled in for you; add more later with Add models.', models: OPENAI_MODELS },
   {
-    id: 'anthropic', name: 'Anthropic', label: 'Anthropic', url: 'https://api.anthropic.com/v1', needsKey: true,
+    id: 'anthropic', name: 'Anthropic', label: 'Anthropic', url: 'https://api.anthropic.com/v1', dashboardUrl: 'https://platform.claude.com/login', needsKey: true,
     note: 'Anthropic’s OpenAI-compatible endpoint, meant for trying Claude models. It supports Chat Completions only and ignores some OpenAI fields. Use a Claude API key.',
   },
   {
-    id: 'gemini', name: 'Google Gemini', label: 'Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai', needsKey: true,
+    id: 'gemini', name: 'Google Gemini', label: 'Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai', dashboardUrl: 'https://aistudio.google.com/apikey', needsKey: true,
     note: 'Gemini’s OpenAI-compatible endpoint. Use a Gemini API key.',
   },
   {
-    id: 'fireworks', name: 'Fireworks AI', label: 'Fireworks', url: 'https://api.fireworks.ai/inference/v1', needsKey: true,
+    id: 'fireworks', name: 'Fireworks AI', label: 'Fireworks', url: 'https://api.fireworks.ai/inference/v1', dashboardUrl: 'https://app.fireworks.ai/login', needsKey: true,
     note: 'Fireworks AI’s OpenAI-compatible endpoint. Use a Fireworks API key.',
   },
   {
-    id: 'featherless', name: 'Featherless AI', label: 'Featherless', url: 'https://api.featherless.ai/v1', needsKey: true,
+    id: 'featherless', name: 'Featherless AI', label: 'Featherless', url: 'https://api.featherless.ai/v1', dashboardUrl: 'https://featherless.ai/login', needsKey: true,
     note: 'Featherless AI’s OpenAI-compatible endpoint. Use a Featherless API key.',
   },
   {

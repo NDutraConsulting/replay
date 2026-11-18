@@ -40,6 +40,24 @@ export function apiPanelHTML(state) {
 export const accountHTML = (state) =>
   `<div class="account-grid"><div class="account-main">${addApiHTML()}<div id="api-panel-slot">${apiPanelHTML(state)}</div></div><aside class="account-aside"><div class="circle-icon">${icon('lock')}</div><h3>Your keys stay on the server.</h3><p>Replay Chat’s server calls the APIs you configure on your behalf, so your keys never have to live in your browser.</p><ul><li>Use your provider’s model IDs.</li><li>Use HTTPS for hosted APIs.</li><li>The server must be able to reach each API URL.</li></ul><div class="account-notice">Your API keys are encrypted at rest. Conversations and replay results are saved to your account.</div><p class="account-cost-note">API requests may incur charges with your provider. Test connection sends one short request.</p></aside></div>${footerHTML()}`;
 
+/** The tour's steps: what to read, and what the next button says. Each is the body of a popup. */
+export const TOUR_STEPS = [
+  {
+    title: 'Set up your API · 1 of 2',
+    next: 'Next',
+    bodyHTML: () =>
+      `<p>Replay Chat calls your own API account, so you need an API key from a provider. Sign in to its dashboard, create a key, and keep the tab open to copy it.</p><ul class="tour-links">${API_PRESETS.filter((p) => p.dashboardUrl)
+        .map((p) => `<li><a href="${esc(p.dashboardUrl)}" target="_blank" rel="noopener noreferrer">${esc(p.name)}<span class="tour-url">${esc(p.dashboardUrl.replace('https://', ''))}</span></a></li>`)
+        .join('')}</ul><small>Running a model on your own machine (Ollama, LM Studio, vLLM)? It needs no key. Choose Custom in the next step.</small>`,
+  },
+  {
+    title: 'Set up your API · 2 of 2',
+    next: 'Add my API',
+    bodyHTML: () =>
+      '<ol class="tour-steps"><li>Pick your provider under <strong>Add an API</strong>. Its URL is filled in for you.</li><li>Paste your key. It is encrypted on the server and never sent back to your browser.</li><li>Choose <strong>Add API</strong>, then <strong>Test connection</strong>.</li></ol><small>You can add more APIs at any time.</small>',
+  },
+];
+
 export const els = () => ({
   addForm: document.getElementById('add-api-form'),
   provider: document.getElementById('new-api-provider'),

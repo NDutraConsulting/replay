@@ -18,6 +18,7 @@ async def get(db_path: str, user_id: str) -> UserPreferences | None:
             replay_prompts_hidden=bool(row["replay_prompts_hidden"]),
             show_compact_button=bool(row["show_compact_button"]),
             show_rewind_button=bool(row["show_rewind_button"]),
+            api_tour_seen=bool(row["api_tour_seen"]),
             updated_at=row["updated_at"],
         )
 
@@ -31,6 +32,7 @@ _COLUMNS = {
     "replay_prompts_hidden": int,
     "show_compact_button": int,
     "show_rewind_button": int,
+    "api_tour_seen": int,
 }
 
 

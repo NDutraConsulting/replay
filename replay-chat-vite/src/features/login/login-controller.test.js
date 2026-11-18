@@ -4,12 +4,13 @@ import { safeNext, validateCredentials } from './login-api.js';
 
 const $ = (id) => document.getElementById(id);
 
-async function boot({ user = null, search = '' } = {}) {
+async function boot({ user = null, search = '', tourSeen = null } = {}) {
   vi.resetModules();
   history.replaceState({}, '', '/login.html' + search);
   const go = vi.fn();
   const mock = mockApi({
     'GET /api/me': () => user ?? apiError(401, 'not_logged_in', 'Not logged in.'),
+    ...(tourSeen === null ? {} : { 'GET /api/preferences': () => ({ api_tour_seen: tourSeen }) }),
     'POST /api/account/login': ({ body }) =>
       body.password === 'right-password' ? { user_id: 'u1', username: body.username } : apiError(401, 'invalid_credentials', 'Invalid username or password.'),
     'POST /api/account/signup': ({ body }) =>
@@ -37,6 +38,25 @@ describe('login page', () => {
     await settle();
     expect(mock.lastBody('POST /api/account/login')).toEqual({ username: 'demo', password: 'right-password' });
     expect(go).toHaveBeenCalledWith('/');
+  });
+
+  it('sends a first login to the Account page, where the API setup tour starts', async () => {
+    const { go } = await boot({ tourSeen: false });
+    fill('demo', 'right-password');
+    await settle();
+    expect(go).toHaveBeenCalledWith('/account.html');
+  });
+
+  it('does not redirect once the tour was seen, and keeps an explicit ?next=', async () => {
+    const seen = await boot({ tourSeen: true });
+    fill('demo', 'right-password');
+    await settle();
+    expect(seen.go).toHaveBeenCalledWith('/');
+    document.body.innerHTML = '';
+    const deep = await boot({ tourSeen: false, search: '?next=/replay.html' });
+    fill('demo', 'right-password');
+    await settle();
+    expect(deep.go).toHaveBeenCalledWith('/replay.html');
   });
 
   it('shows the server message for wrong credentials and lets the user retry', async () => {

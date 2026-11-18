@@ -1,11 +1,12 @@
 import '../../shared/styles/base.css';
 import './account.css';
 import { choiceDialog, showModal } from '../../shared/modal-ui.js';
+import { savePreferences } from '../../shared/app-api.js';
 import { startPage } from '../../shared/shell-ui.js';
 import { toast, toastError } from '../../shared/toast.js';
 import { addConnection, deleteConnection, parseModels, listConnections, saveConnection, testConnection } from './account-api.js';
 import {
-  accountHTML, applyPreset, els, readAddForm, readApiForm, renderApiPanel, setStatus, setTesting, toggleKeyVisibility,
+  accountHTML, applyPreset, els, readAddForm, readApiForm, renderApiPanel, setStatus, setTesting, toggleKeyVisibility, TOUR_STEPS,
 } from './account-ui.js';
 
 /** Orchestrates the account page: API (the account's APIs on the server) <-> UI (add form + the models panel). */
@@ -134,7 +135,30 @@ export const initAccount = () =>
       }
     }
 
+    /** The first-login tour: one popup per step. Finishing, skipping or closing it marks it seen, so it never reopens. */
+    function runTour(index = 0) {
+      const step = TOUR_STEPS[index];
+      const last = index === TOUR_STEPS.length - 1;
+      const finish = () => {
+        app.preferences.apiTourSeen = true;
+        savePreferences({ apiTourSeen: true }).catch(() => {}); // best effort: worst case the tour shows once more
+      };
+      showModal({
+        title: step.title,
+        bodyHTML: step.bodyHTML(),
+        submitLabel: step.next,
+        cancelLabel: 'Skip tour',
+        onSubmit: () => {
+          if (!last) return void queueMicrotask(() => runTour(index + 1));
+          finish();
+          queueMicrotask(() => els().provider?.focus());
+        },
+        onDismiss: finish,
+      });
+    }
+
     render();
+    if (app.preferences.apiTourSeen === false) runTour();
   });
 
 initAccount();

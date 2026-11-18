@@ -1,6 +1,6 @@
 import '../../shared/styles/base.css';
 import './login.css';
-import { currentUser, login, safeNext, signup, validateCredentials } from './login-api.js';
+import { apiTourSeen, currentUser, login, safeNext, signup, validateCredentials } from './login-api.js';
 import { bindLogin, loginHTML, showError } from './login-ui.js';
 
 /** Orchestrates the login page: API (session endpoints) <-> UI (form). */
@@ -37,7 +37,8 @@ export async function initLogin({ go = (url) => location.assign(url) } = {}) {
       document.querySelector('.login-submit').disabled = false;
       return showError(err.message);
     }
-    go(next);
+    // A first login lands on the Account page, which starts the API setup tour (unless the user was heading somewhere specific).
+    go(next === '/' && !(await apiTourSeen()) ? '/account.html' : next);
   }
 
   render();

@@ -13,6 +13,15 @@ export async function currentUser() {
 export const login = (username, password) => api.post('/api/account/login', { username, password });
 export const signup = (username, password) => api.post('/api/account/signup', { username, password });
 
+/** Has this account finished or skipped the first-login API setup tour? (An unreadable answer counts as yes: never trap a login.) */
+export async function apiTourSeen() {
+  try {
+    return (await api.get('/api/preferences')).api_tour_seen !== false;
+  } catch {
+    return true;
+  }
+}
+
 /** Where to go after logging in: a same-site path from ?next=, otherwise the home page. */
 export function safeNext(search) {
   const next = new URLSearchParams(search).get('next') || '/';

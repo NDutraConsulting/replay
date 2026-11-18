@@ -12,10 +12,11 @@ const wire = (id, label, extra = {}) => ({
 }); // fmt: skip
 
 /** An in-memory fake of the connections routes. */
-async function boot(initial = []) {
+async function boot(initial = [], { tourSeen = true } = {}) {
   vi.resetModules();
   setUnauthorizedHandler(vi.fn());
-  const { routes } = appRoutes();
+  const base = appRoutes().state.preferences;
+  const { routes } = appRoutes({ preferences: { ...base, api_tour_seen: tourSeen } });
   const server = { apis: initial.map((a) => structuredClone(a)), next: 1, tests: [], failTest: null };
   const find = (id) => server.apis.find((a) => a.connection_id === id);
   const mock = mockApi({
@@ -60,6 +61,46 @@ const labels = () => [...$('api-label').options].map((o) => o.textContent);
 describe('account page', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
+  });
+
+  describe('first-login API setup tour', () => {
+    const tour = () => document.querySelector('.modal');
+    const click = (label) => [...document.querySelectorAll('.modal button')].find((b) => b.textContent === label).click();
+
+    it('does not open for someone who has already seen it', async () => {
+      await boot([], { tourSeen: true });
+      expect(tour()).toBeNull();
+    });
+
+    it('opens on step 1 with the provider dashboard links, OpenAI first', async () => {
+      await boot([], { tourSeen: false });
+      expect(text(tour().querySelector('h2'))).toBe('Set up your API · 1 of 2');
+      const hrefs = [...tour().querySelectorAll('a')].map((a) => a.href);
+      expect(hrefs[0]).toBe('https://platform.openai.com/login');
+      expect(hrefs.length).toBeGreaterThan(1);
+      expect(tour().querySelector('a').target).toBe('_blank');
+    });
+
+    it('goes to step 2, then finishing marks it seen and focuses the provider picker', async () => {
+      const { mock } = await boot([], { tourSeen: false });
+      click('Next');
+      await settle();
+      expect(text(tour().querySelector('h2'))).toBe('Set up your API · 2 of 2');
+      expect(mock.count('PUT /api/preferences')).toBe(0); // nothing saved until the tour ends
+      click('Add my API');
+      await settle();
+      expect(tour()).toBeNull();
+      expect(mock.lastBody('PUT /api/preferences')).toEqual({ api_tour_seen: true });
+      expect(document.activeElement).toBe($('new-api-provider'));
+    });
+
+    it('skipping marks it seen too, so it never comes back', async () => {
+      const { mock } = await boot([], { tourSeen: false });
+      click('Skip tour');
+      await settle();
+      expect(tour()).toBeNull();
+      expect(mock.lastBody('PUT /api/preferences')).toEqual({ api_tour_seen: true });
+    });
   });
 
   it('has no intro heading, shows who is logged in, and offers to add an API', async () => {
